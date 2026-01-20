@@ -8,7 +8,7 @@ CSCI 251: Concepts of Parallel and Distributed Systems
 
 **Team Members:**
 - Rue Clow-McLaughlin
-- [Name 2]
+- Devlin Gallagher
 - [Name 3]
 - [Name 4]
 - [Name 5]
