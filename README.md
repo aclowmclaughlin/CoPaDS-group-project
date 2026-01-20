@@ -4,7 +4,7 @@ CSCI 251: Concepts of Parallel and Distributed Systems
 
 ## Team Information
 
-**Team Name:** [Your Team Name]
+**Team Name:** Team 7
 
 **Team Members:**
 - [Name 1]
