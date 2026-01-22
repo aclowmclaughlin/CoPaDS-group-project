@@ -10,8 +10,9 @@ CSCI 251: Concepts of Parallel and Distributed Systems
 =======
 - Rue Clow-McLaughlin
 - Devlin Gallagher
-- Sophie Duquette 
-- Nicholas Merante
+- [Name 3]
+- [Name 4]
+- [Name 5]
 
 ## Build Instructions
 
