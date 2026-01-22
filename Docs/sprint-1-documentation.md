@@ -1,7 +1,7 @@
 # Sprint 1 Documentation
 ## Secure Distributed Messenger
 
-**Team Name:** [Your Team Name]
+**Team Name:** Team 7
 
 **Team Members:**
 - Rue Clow-McLaughlin - [Role/Responsibilities]
