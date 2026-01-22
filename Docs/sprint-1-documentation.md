@@ -4,11 +4,10 @@
 **Team Name:** [Your Team Name]
 
 **Team Members:**
-- [Name 1] - [Role/Responsibilities]
-- [Name 2] - [Role/Responsibilities]
-- [Name 3] - [Role/Responsibilities]
+- Rue Clow-McLaughlin - [Role/Responsibilities]
+- Devlin Gallagher - [Role/Responsibilities]
+- Nicholas Merante - [Role/Responsibilities]
 - [Name 4] - [Role/Responsibilities]
-- [Name 5] - [Role/Responsibilities]
 
 **Date:** [Submission Date]
 
