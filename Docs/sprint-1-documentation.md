@@ -7,7 +7,7 @@
 - Rue Clow-McLaughlin - [Role/Responsibilities]
 - Devlin Gallagher - [Role/Responsibilities]
 - Nicholas Merante - [Role/Responsibilities]
-- [Name 4] - [Role/Responsibilities]
+- Sophie Duquette - [Role/Responsibilities]
 
 **Date:** [Submission Date]
 
