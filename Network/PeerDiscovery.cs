@@ -12,6 +12,12 @@ namespace SecureMessenger.Network;
 /// <summary>
 /// Sprint 3: UDP-based peer discovery using broadcast.
 /// Broadcasts presence and listens for other peers on the local network.
+///
+/// Discovery Protocol:
+/// - Message format: "PEER:{peerId}:{tcpPort}"
+/// - Example: "PEER:abc12345:5000"
+/// - Broadcast every 5 seconds
+/// - Peers timeout after 30 seconds of no broadcasts
 /// </summary>
 public class PeerDiscovery
 {
@@ -29,133 +35,93 @@ public class PeerDiscovery
     public string LocalPeerId { get; } = Guid.NewGuid().ToString()[..8];
 
     /// <summary>
-    /// Start broadcasting presence and listening for other peers
+    /// Start broadcasting presence and listening for other peers.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Store the TCP port
+    /// 2. Create a new CancellationTokenSource
+    /// 3. Create a UdpClient on the broadcast port
+    /// 4. Enable broadcast on the UDP client
+    /// 5. Create and start a thread for ListenLoop
+    /// 6. Create and start a thread for BroadcastLoop
+    /// 7. Start a background task for TimeoutCheckLoop
     /// </summary>
     public void Start(int tcpPort)
     {
-        // TODO: Implement UDP broadcast discovery
-        TcpPort = tcpPort;
-        _cancellationTokenSource = new CancellationTokenSource();
-
-        _udpClient = new UdpClient(_broadcastPort);
-        _udpClient.EnableBroadcast = true;
-
-        // Start listening for broadcasts
-        _listenThread = new Thread(ListenLoop);
-        _listenThread.Start();
-
-        // Start broadcasting our presence
-        _broadcastThread = new Thread(BroadcastLoop);
-        _broadcastThread.Start();
-
-        // Start timeout checker
-        _ = Task.Run(TimeoutCheckLoop);
-    }
-
-    private void BroadcastLoop()
-    {
-        // TODO: Periodically broadcast our presence
-        var endpoint = new IPEndPoint(IPAddress.Broadcast, _broadcastPort);
-
-        while (!_cancellationTokenSource!.Token.IsCancellationRequested)
-        {
-            try
-            {
-                var message = $"PEER:{LocalPeerId}:{TcpPort}";
-                var data = Encoding.UTF8.GetBytes(message);
-                _udpClient!.Send(data, data.Length, endpoint);
-            }
-            catch (SocketException)
-            {
-                // Ignore broadcast errors
-            }
-
-            Thread.Sleep(5000); // Broadcast every 5 seconds
-        }
-    }
-
-    private void ListenLoop()
-    {
-        // TODO: Listen for peer broadcasts
-        var anyEndpoint = new IPEndPoint(IPAddress.Any, _broadcastPort);
-
-        while (!_cancellationTokenSource!.Token.IsCancellationRequested)
-        {
-            try
-            {
-                var data = _udpClient!.Receive(ref anyEndpoint);
-                var message = Encoding.UTF8.GetString(data);
-
-                if (message.StartsWith("PEER:"))
-                {
-                    ProcessDiscoveryMessage(message, anyEndpoint.Address);
-                }
-            }
-            catch (SocketException)
-            {
-                // Ignore receive errors
-            }
-        }
-    }
-
-    private void ProcessDiscoveryMessage(string message, IPAddress senderAddress)
-    {
-        // TODO: Parse discovery message and add peer
-        var parts = message.Split(':');
-        if (parts.Length >= 3)
-        {
-            var peerId = parts[1];
-            var port = int.Parse(parts[2]);
-
-            // Don't add ourselves
-            if (peerId == LocalPeerId) return;
-
-            var peer = new Peer
-            {
-                Id = peerId,
-                Address = senderAddress,
-                Port = port,
-                LastSeen = DateTime.Now,
-                IsConnected = false
-            };
-
-            if (_knownPeers.TryAdd(peerId, peer))
-            {
-                OnPeerDiscovered?.Invoke(peer);
-            }
-            else
-            {
-                // Update last seen
-                _knownPeers[peerId].LastSeen = DateTime.Now;
-            }
-        }
-    }
-
-    private async Task TimeoutCheckLoop()
-    {
-        // TODO: Remove peers that haven't been seen recently (30 second timeout)
-        while (!_cancellationTokenSource!.Token.IsCancellationRequested)
-        {
-            var timeout = TimeSpan.FromSeconds(30);
-            var now = DateTime.Now;
-
-            foreach (var kvp in _knownPeers)
-            {
-                if (now - kvp.Value.LastSeen > timeout)
-                {
-                    if (_knownPeers.TryRemove(kvp.Key, out var peer))
-                    {
-                        OnPeerLost?.Invoke(peer);
-                    }
-                }
-            }
-
-            await Task.Delay(5000);
-        }
+        throw new NotImplementedException("Implement Start() - see TODO in comments above");
     }
 
     /// <summary>
-    /// Get list of known peers
+    /// Periodically broadcast our presence to the network.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Create an IPEndPoint for broadcast (IPAddress.Broadcast, _broadcastPort)
+    /// 2. Loop while cancellation not requested:
+    ///    a. Create discovery message: "PEER:{LocalPeerId}:{TcpPort}"
+    ///    b. Convert to bytes using UTF8 encoding
+    ///    c. Send via UDP client to the broadcast endpoint
+    ///    d. Handle SocketException (ignore broadcast errors)
+    ///    e. Sleep for 5 seconds between broadcasts
+    /// </summary>
+    private void BroadcastLoop()
+    {
+        throw new NotImplementedException("Implement BroadcastLoop() - see TODO in comments above");
+    }
+
+    /// <summary>
+    /// Listen for peer broadcast messages.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Create an IPEndPoint for receiving (IPAddress.Any, _broadcastPort)
+    /// 2. Loop while cancellation not requested:
+    ///    a. Receive data from UDP client (blocks until data available)
+    ///    b. Convert bytes to string using UTF8 encoding
+    ///    c. If message starts with "PEER:", call ProcessDiscoveryMessage
+    ///    d. Handle SocketException (ignore receive errors)
+    /// </summary>
+    private void ListenLoop()
+    {
+        throw new NotImplementedException("Implement ListenLoop() - see TODO in comments above");
+    }
+
+    /// <summary>
+    /// Parse a discovery message and add/update the peer.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Split the message by ':' - format is "PEER:peerId:port"
+    /// 2. Validate we have at least 3 parts
+    /// 3. Extract peerId (parts[1]) and port (parts[2])
+    /// 4. If peerId equals LocalPeerId, return (don't add ourselves)
+    /// 5. Create a Peer object with the extracted info and current timestamp
+    /// 6. Try to add to _knownPeers:
+    ///    - If new peer, invoke OnPeerDiscovered
+    ///    - If existing peer, update LastSeen timestamp
+    /// </summary>
+    private void ProcessDiscoveryMessage(string message, IPAddress senderAddress)
+    {
+        throw new NotImplementedException("Implement ProcessDiscoveryMessage() - see TODO in comments above");
+    }
+
+    /// <summary>
+    /// Periodically check for peers that have timed out (no broadcast in 30 seconds).
+    ///
+    /// TODO: Implement the following:
+    /// 1. Loop while cancellation not requested:
+    ///    a. Define timeout as 30 seconds
+    ///    b. Get current time
+    ///    c. Iterate through _knownPeers
+    ///    d. If (now - peer.LastSeen) > timeout:
+    ///       - Remove from _knownPeers
+    ///       - Invoke OnPeerLost
+    ///    e. Delay 5 seconds between checks
+    /// </summary>
+    private async Task TimeoutCheckLoop()
+    {
+        throw new NotImplementedException("Implement TimeoutCheckLoop() - see TODO in comments above");
+    }
+
+    /// <summary>
+    /// Get list of known peers.
     /// </summary>
     public IEnumerable<Peer> GetKnownPeers()
     {
@@ -163,13 +129,15 @@ public class PeerDiscovery
     }
 
     /// <summary>
-    /// Stop discovery
+    /// Stop discovery.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Cancel the cancellation token
+    /// 2. Close the UDP client
+    /// 3. Wait for threads to finish (with timeout)
     /// </summary>
     public void Stop()
     {
-        _cancellationTokenSource?.Cancel();
-        _udpClient?.Close();
-        _listenThread?.Join(1000);
-        _broadcastThread?.Join(1000);
+        throw new NotImplementedException("Implement Stop() - see TODO in comments above");
     }
 }

@@ -4,10 +4,10 @@ CSCI 251: Concepts of Parallel and Distributed Systems
 
 ## Team Information
 
-**Team Name:** Team 7
+**Team Name:** [Your Team Name]
 
 **Team Members:**
-- Rue Clow-McLaughlin
+- [Name 1]
 - [Name 2]
 - [Name 3]
 - [Name 4]
@@ -73,43 +73,108 @@ Goodbye!
 
 ```
 SecureMessenger/
-+-- Program.cs                 # Entry point
-+-- Core/
-|   +-- Message.cs             # Message model
-|   +-- MessageQueue.cs        # Thread-safe queue
-|   +-- Peer.cs                # Peer information
-+-- Network/
-|   +-- TcpServer.cs           # Listens for connections
-|   +-- TcpClientHandler.cs    # Handles outgoing connections
-|   +-- PeerDiscovery.cs       # UDP broadcast discovery
-|   +-- HeartbeatMonitor.cs    # Connection health monitoring
-|   +-- ReconnectionPolicy.cs  # Automatic reconnection
-+-- Security/
-|   +-- AesEncryption.cs       # AES encrypt/decrypt
-|   +-- RsaEncryption.cs       # RSA key management
-|   +-- MessageSigner.cs       # Digital signatures
-|   +-- KeyExchange.cs         # Key exchange protocol
-+-- UI/
-|   +-- ConsoleUI.cs           # User interface
-|   +-- MessageHistory.cs      # Message persistence
+├── Program.cs                 # Entry point - implement main loop and threading
+├── Core/
+│   ├── Message.cs             # Message model (provided)
+│   ├── MessageQueue.cs        # Thread-safe queue (implement)
+│   └── Peer.cs                # Peer information (provided)
+├── Network/
+│   ├── TcpServer.cs           # Listens for connections (implement)
+│   ├── TcpClientHandler.cs    # Handles outgoing connections (implement)
+│   ├── PeerDiscovery.cs       # UDP broadcast discovery (implement)
+│   ├── HeartbeatMonitor.cs    # Connection health monitoring (implement)
+│   └── ReconnectionPolicy.cs  # Automatic reconnection (implement)
+├── Security/
+│   ├── AesEncryption.cs       # AES encrypt/decrypt (implement)
+│   ├── RsaEncryption.cs       # RSA key management (implement)
+│   ├── MessageSigner.cs       # Digital signatures (implement)
+│   └── KeyExchange.cs         # Key exchange protocol (implement)
+└── UI/
+    ├── ConsoleUI.cs           # User interface (implement)
+    └── MessageHistory.cs      # Message persistence (implement)
 ```
 
-## Sprint Implementation Notes
+## What's Provided vs. What You Implement
 
-### Sprint 1: Threading & Basic Networking
-- TODO: Complete the threading model in Program.cs
-- TODO: Implement message sending/receiving in TcpServer and TcpClientHandler
-- TODO: Wire up the MessageQueue for thread-safe communication
+### Provided (Do Not Modify)
+- **Class structures**: All classes, fields, properties, and method signatures
+- **Data models**: `Message.cs` and `Peer.cs` are complete
+- **Events**: All event declarations for thread communication
+- **Constants**: Configuration values (timeouts, intervals, key sizes)
+- **Enums**: `CommandType`, `ConnectionState`, etc.
 
-### Sprint 2: Security & Encryption
-- TODO: Integrate AesEncryption for message content
-- TODO: Implement key exchange protocol using KeyExchange
-- TODO: Add message signing with MessageSigner
+### You Must Implement
+All methods marked with `throw new NotImplementedException()` - look for the detailed TODO comments in each method that explain exactly what to implement.
 
-### Sprint 3: P2P & Advanced Features
-- TODO: Enable PeerDiscovery for automatic peer finding
-- TODO: Integrate HeartbeatMonitor for connection health
-- TODO: Implement ReconnectionPolicy for resilience
+## Sprint Implementation Guide
+
+### Sprint 1: Threading & Basic Networking (Week 5)
+
+**Files to complete:**
+- `Program.cs` - Main loop, thread creation, event handling
+- `Core/MessageQueue.cs` - Thread-safe producer/consumer queue
+- `Network/TcpServer.cs` - TCP listener, accept loop, receive threads
+- `Network/TcpClientHandler.cs` - TCP client, connect, send/receive
+- `UI/ConsoleUI.cs` - Command parsing and message display
+
+**Key concepts:**
+- Multi-threading with `Thread` and `Task`
+- Thread synchronization with `lock` and `BlockingCollection`
+- TCP sockets with `TcpListener` and `TcpClient`
+- Event-driven programming with C# events
+
+### Sprint 2: Security & Encryption (Week 10)
+
+**Files to complete:**
+- `Security/AesEncryption.cs` - AES-256-CBC encryption/decryption
+- `Security/RsaEncryption.cs` - RSA-2048 key pair management
+- `Security/MessageSigner.cs` - RSA-SHA256 digital signatures
+- `Security/KeyExchange.cs` - Key exchange state machine
+
+**Key concepts:**
+- Symmetric encryption (AES)
+- Asymmetric encryption (RSA)
+- Digital signatures
+- Key exchange protocols
+
+### Sprint 3: P2P & Advanced Features (Week 14)
+
+**Files to complete:**
+- `Network/PeerDiscovery.cs` - UDP broadcast for peer discovery
+- `Network/HeartbeatMonitor.cs` - Connection health monitoring
+- `Network/ReconnectionPolicy.cs` - Exponential backoff reconnection
+- `UI/MessageHistory.cs` - JSON-based message persistence
+
+**Key concepts:**
+- UDP broadcast
+- Heartbeat/keepalive patterns
+- Exponential backoff retry logic
+- File I/O with JSON serialization
+
+## Technical Specifications
+
+### Wire Protocol
+- Messages sent as newline-terminated strings
+- Sprint 2+: JSON-serialized Message objects with encrypted content
+
+### Encryption (Sprint 2)
+- **AES-256-CBC**: 32-byte key, 16-byte IV prepended to ciphertext
+- **RSA-2048**: OAEP-SHA256 padding for key exchange
+- **Signatures**: RSA-SHA256 with PKCS#1 v1.5 padding
+
+### Discovery Protocol (Sprint 3)
+- UDP broadcast on port 5001
+- Message format: `PEER:<peerId>:<tcpPort>`
+- Broadcast interval: 5 seconds
+- Peer timeout: 30 seconds
+
+### Heartbeat (Sprint 3)
+- Interval: 5 seconds
+- Timeout: 15 seconds
+
+### Reconnection (Sprint 3)
+- Max attempts: 5
+- Backoff: 1s → 2s → 4s → 8s → 16s (capped at 30s)
 
 ## Known Issues
 
