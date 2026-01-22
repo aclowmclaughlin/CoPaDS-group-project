@@ -7,11 +7,11 @@ CSCI 251: Concepts of Parallel and Distributed Systems
 **Team Name:** [Your Team Name]
 
 **Team Members:**
-- [Name 1]
-- [Name 2]
-- [Name 3]
-- [Name 4]
-- [Name 5]
+=======
+- Rue Clow-McLaughlin
+- Devlin Gallagher
+- Sophie Duquette 
+- Nicholas Merante
 
 ## Build Instructions
 
