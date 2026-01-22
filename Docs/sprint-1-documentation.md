@@ -4,10 +4,10 @@
 **Team Name:** [Your Team Name]
 
 **Team Members:**
-- Rue Clow-McLaughlin - [Role/Responsibilities]
-- Devlin Gallagher - [Role/Responsibilities]
-- Nicholas Merante - [Role/Responsibilities]
-- Sophie Duquette - [Role/Responsibilities]
+- Rue Clow-McLaughlin - ConsoleUI & MessageQueue
+- Devlin Gallagher - TCPClientHandler
+- Nicholas Merante - TCPServer
+- Sophie Duquette - Program
 
 **Date:** [Submission Date]
 
@@ -69,12 +69,12 @@
 ## Features Implemented
 
 - [ ] Multi-threaded architecture
-- [ ] Thread-safe message queue
+- [ ] Thread-safe message queue - Rue
 - [ ] TCP server (listen for connections)
 - [ ] TCP client (connect to peers)
 - [ ] Send/receive text messages
 - [ ] Graceful disconnection handling
-- [ ] Console UI with commands
+- [ ] Console UI with commands - Rue
 
 ---
 
