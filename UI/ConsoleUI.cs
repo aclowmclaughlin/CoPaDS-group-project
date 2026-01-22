@@ -7,7 +7,15 @@ namespace SecureMessenger.UI;
 
 /// <summary>
 /// Console-based user interface.
-/// Handles user input and message display.
+/// Handles user input parsing and message display.
+///
+/// Supported Commands:
+/// - /connect <ip> <port>  - Connect to a peer
+/// - /listen <port>        - Start listening for connections
+/// - /peers                - List known peers
+/// - /history              - View message history
+/// - /quit or /exit        - Exit the application
+/// - Any other text        - Send as a message
 /// </summary>
 public class ConsoleUI
 {
@@ -19,90 +27,67 @@ public class ConsoleUI
     }
 
     /// <summary>
-    /// Display a received message
+    /// Display a received message to the console.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Format the timestamp as "HH:mm:ss"
+    /// 2. Print in format: "[timestamp] sender: content"
     /// </summary>
     public void DisplayMessage(Message message)
     {
-        // TODO: Display message with timestamp and sender
-        var timestamp = message.Timestamp.ToString("HH:mm:ss");
-        Console.WriteLine($"[{timestamp}] {message.Sender}: {message.Content}");
+        throw new NotImplementedException("Implement DisplayMessage() - see TODO in comments above");
     }
 
     /// <summary>
-    /// Display system message
+    /// Display a system message to the console.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Print in format: "[System] message"
     /// </summary>
     public void DisplaySystem(string message)
     {
-        Console.WriteLine($"[System] {message}");
+        throw new NotImplementedException("Implement DisplaySystem() - see TODO in comments above");
     }
 
     /// <summary>
-    /// Show available commands
+    /// Show available commands to the user.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Print a formatted help message showing all available commands
+    /// 2. Include: /connect, /listen, /peers, /history, /quit
     /// </summary>
     public void ShowHelp()
     {
-        Console.WriteLine("\nAvailable Commands:");
-        Console.WriteLine("  /connect <ip> <port>  - Connect to a peer");
-        Console.WriteLine("  /listen <port>        - Start listening for connections");
-        Console.WriteLine("  /peers                - List known peers");
-        Console.WriteLine("  /history              - View message history");
-        Console.WriteLine("  /quit                 - Exit the application");
-        Console.WriteLine();
+        throw new NotImplementedException("Implement ShowHelp() - see TODO in comments above");
     }
 
     /// <summary>
-    /// Parse and execute a command
+    /// Parse user input and return a CommandResult.
+    ///
+    /// TODO: Implement the following:
+    /// 1. Check if input starts with "/" - if not, it's a regular message:
+    ///    - Return CommandResult with IsCommand = false, Message = input
+    ///
+    /// 2. If it's a command, split by spaces and parse:
+    ///    - "/connect <ip> <port>" -> CommandType.Connect with Args = [ip, port]
+    ///    - "/listen <port>" -> CommandType.Listen with Args = [port]
+    ///    - "/peers" -> CommandType.ListPeers
+    ///    - "/history" -> CommandType.History
+    ///    - "/quit" or "/exit" -> CommandType.Quit
+    ///    - Unknown command -> CommandType.Unknown with error message
+    ///
+    /// Hint: Use string.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+    /// Hint: Use a switch expression for clean command matching
     /// </summary>
     public CommandResult ParseCommand(string input)
     {
-        // TODO: Parse user commands
-        if (!input.StartsWith("/"))
-        {
-            return new CommandResult { IsCommand = false, Message = input };
-        }
-
-        var parts = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var command = parts[0].ToLower();
-
-        return command switch
-        {
-            "/connect" when parts.Length >= 3 => new CommandResult
-            {
-                IsCommand = true,
-                CommandType = CommandType.Connect,
-                Args = parts[1..].ToArray()
-            },
-            "/listen" when parts.Length >= 2 => new CommandResult
-            {
-                IsCommand = true,
-                CommandType = CommandType.Listen,
-                Args = parts[1..].ToArray()
-            },
-            "/peers" => new CommandResult
-            {
-                IsCommand = true,
-                CommandType = CommandType.ListPeers
-            },
-            "/history" => new CommandResult
-            {
-                IsCommand = true,
-                CommandType = CommandType.History
-            },
-            "/quit" or "/exit" => new CommandResult
-            {
-                IsCommand = true,
-                CommandType = CommandType.Quit
-            },
-            _ => new CommandResult
-            {
-                IsCommand = true,
-                CommandType = CommandType.Unknown,
-                Message = $"Unknown command: {command}"
-            }
-        };
+        throw new NotImplementedException("Implement ParseCommand() - see TODO in comments above");
     }
 }
 
+/// <summary>
+/// Types of commands the user can enter
+/// </summary>
 public enum CommandType
 {
     Unknown,
@@ -113,10 +98,20 @@ public enum CommandType
     Quit
 }
 
+/// <summary>
+/// Result of parsing a user input line
+/// </summary>
 public class CommandResult
 {
+    /// <summary>True if the input was a command (started with /)</summary>
     public bool IsCommand { get; set; }
+
+    /// <summary>The type of command parsed</summary>
     public CommandType CommandType { get; set; }
+
+    /// <summary>Arguments for the command (e.g., IP and port for /connect)</summary>
     public string[]? Args { get; set; }
+
+    /// <summary>The message content (for non-commands or error messages)</summary>
     public string? Message { get; set; }
 }
