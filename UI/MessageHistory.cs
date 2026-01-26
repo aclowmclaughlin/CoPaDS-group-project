@@ -1,4 +1,4 @@
-// [Your Name Here]
+// Team 7: Rue Clow-McLaughli, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
 using System.Text.Json;
