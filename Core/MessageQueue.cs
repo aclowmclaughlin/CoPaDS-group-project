@@ -66,29 +66,29 @@ public class MessageQueue
 
     /// <summary>
     /// Enqueue an outgoing message (to be sent to network).
-    ///
-    /// TODO: Implement the following:
-    /// 1. Add the message to your outgoing queue
-    /// 2. Ensure thread safety
     /// </summary>
     public void EnqueueOutgoing(Message message)
     {
-        
+        _outgoing_queue.Add(message);
     }
 
     /// <summary>
     /// Dequeue an outgoing message for sending.
     /// This method should BLOCK if the queue is empty.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Take a message from the outgoing queue
-    /// 2. Block if the queue is empty
-    /// 3. Support cancellation via the CancellationToken
     /// </summary>
     public Message DequeueOutgoing(CancellationToken cancellationToken = default)
     {
-        throw new NotImplementedException("Implement DequeueOutgoing() - see TODO in comments above");
+        return _outgoing_queue.Take(cancellationToken);
     }
+
+    /// <summary>
+    /// Try to dequeue an outgoing message without blocking.
+    /// </summary>
+    public bool TryDequeueOutgoing(out Message? message)
+    {
+        return _outgoing_queue.TryTake(out message);
+    }
+
 
     /// <summary>
     /// Get the count of incoming messages waiting to be processed.
@@ -100,19 +100,15 @@ public class MessageQueue
     ///
     /// TODO: Return the count of your outgoing queue
     /// </summary>
-    public int OutgoingCount => throw new NotImplementedException("Implement OutgoingCount property");
+    public int OutgoingCount => _outgoing_queue.Count;
 
     /// <summary>
     /// Signal that no more messages will be added.
     /// Call this during shutdown to unblock waiting consumers.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Mark both queues as complete (no more additions)
-    ///
-    /// Hint: BlockingCollection.CompleteAdding() does this
     /// </summary>
     public void CompleteAdding()
     {
-        throw new NotImplementedException("Implement CompleteAdding() - see TODO in comments above");
+        _incoming_queue.CompleteAdding();
+        _outgoing_queue.CompleteAdding();
     }
 }
