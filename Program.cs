@@ -76,7 +76,7 @@ class Program
         var messageQueuey = new MessageQueue();         //creates message queue guy
         var consoley = new ConsoleUI(messageQueuey);    // creates a console and put in the message guy
         var servery = new TcpServer();                  // TCP Server 
-        var CLienty = new TcpClientHandler();           //TCP client handler
+        var Clienty = new TcpClientHandler();           //TCP client handler
 
         // TODO: Subscribe to events
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
