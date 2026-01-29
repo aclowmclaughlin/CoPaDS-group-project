@@ -2,6 +2,8 @@
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
+using System.Net.Sockets;
+using Microsoft.VisualBasic;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.Security;
@@ -58,6 +60,7 @@ class Program
     // private static ConsoleUI? _consoleUI;
     // private static CancellationTokenSource? _cancellationTokenSource;
 
+    
     static async Task Main(string[] args)
     {
         Console.WriteLine("Secure Distributed Messenger");
@@ -65,10 +68,15 @@ class Program
 
         // TODO: Initialize components
         // 1. Create CancellationTokenSource for shutdown signaling
-        // 2. Create MessageQueue for thread communication
-        // 3. Create ConsoleUI for user interface
-        // 4. Create TcpServer for incoming connections
-        // 5. Create TcpClientHandler for outgoing connections
+        // 2. Create MessageQueue for thread communication              X
+        // 3. Create ConsoleUI for user interface                       X
+        // 4. Create TcpServer for incoming connections                 X
+        // 5. Create TcpClientHandler for outgoing connections          X
+
+        var messageQueuey = new MessageQueue();         //creates message queue guy
+        var consoley = new ConsoleUI(messageQueuey);    // creates a console and put in the message guy
+        var servery = new TcpServer();                  // TCP Server 
+        var CLienty = new TcpClientHandler();           //TCP client handler
 
         // TODO: Subscribe to events
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
@@ -89,9 +97,9 @@ class Program
         while (running)
         {
             // TODO: Implement the main input loop
-            // 1. Read a line from the console
-            // 2. Skip empty input
-            // 3. Parse the input using ConsoleUI.ParseCommand()
+            // 1. Read a line from the console                      X
+            // 2. Skip empty input                                  X
+            // 3. Parse the input using ConsoleUI.ParseCommand()    
             // 4. Handle the command based on CommandType:
             //    - Connect: Call TcpClientHandler.ConnectAsync()
             //    - Listen: Call TcpServer.Start()
