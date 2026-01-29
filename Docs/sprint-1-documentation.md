@@ -9,7 +9,7 @@
 - Nicholas Merante - TCPServer
 - Sophie Duquette - Program
 
-**Date:** [Submission Date]
+**Date:** 02/28
 
 ---
 
@@ -71,7 +71,7 @@
 - [ ] Multi-threaded architecture
 - [ ] Thread-safe message queue - Rue
 - [ ] TCP server (listen for connections)
-- [ ] TCP client (connect to peers)
+- [ ] TCP client (connect to peers) - Devlin
 - [ ] Send/receive text messages
 - [ ] Graceful disconnection handling
 - [ ] Console UI with commands - Rue

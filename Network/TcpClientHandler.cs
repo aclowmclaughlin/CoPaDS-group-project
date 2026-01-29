@@ -58,6 +58,8 @@ public class TcpClientHandler
     private async Task ReceiveLoop(Peer peer)
     {
         throw new NotImplementedException("Implement ReceiveLoop() - see TODO in comments above");
+
+        // StreamReader
     }
 
     /// <summary>
