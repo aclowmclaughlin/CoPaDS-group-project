@@ -69,7 +69,7 @@
 ## Features Implemented
 
 - [ ] Multi-threaded architecture
-- [ ] Thread-safe message queue - Rue
+- [x] Thread-safe message queue - Rue
 - [ ] TCP server (listen for connections)
 - [ ] TCP client (connect to peers) - Devlin
 - [ ] Send/receive text messages
