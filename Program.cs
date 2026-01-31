@@ -2,6 +2,8 @@
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
+using System.Globalization;
+using System.Net.Quic;
 using System.Net.Sockets;
 using Microsoft.VisualBasic;
 using SecureMessenger.Core;
@@ -61,6 +63,7 @@ class Program
     // private static CancellationTokenSource? _cancellationTokenSource;
 
     
+    
     static async Task Main(string[] args)
     {
         Console.WriteLine("Secure Distributed Messenger");
@@ -111,16 +114,19 @@ class Program
             var input = Console.ReadLine();
             if (string.IsNullOrEmpty(input)) continue;
 
+            var resulty = consoley.ParseCommand(input);
             // Temporary basic command handling - replace with full implementation
-            switch (input.ToLower())
+            switch (resulty.CommandType)
             {
-                case "/quit":
-                case "/exit":
+                case CommandType.Quit:
                     running = false;
                     break;
-                case "/help":
-                    ShowHelp();
-                    break;
+                case CommandType.Connect:
+                //connect
+                case CommandType.Listen:
+                case CommandType.ListPeers:
+                case CommandType.History:
+                case CommandType.Unknown:
                 default:
                     Console.WriteLine("Command not yet implemented. See TODO comments.");
                     break;
