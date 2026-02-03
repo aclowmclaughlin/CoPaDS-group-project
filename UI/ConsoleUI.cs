@@ -14,28 +14,39 @@ namespace SecureMessenger.UI;
 /// - /listen <port>        - Start listening for connections
 /// - /peers                - List known peers
 /// - /history              - View message history
-/// - /quit or /exit        - Exit the application
+/// - /quit                 - Exit the application
+/// - /exit                 - End current session
 /// - Any other text        - Send as a message
 /// </summary>
 public class ConsoleUI
 {
-    private readonly MessageQueue _messageQueue;
+    /// <summary>
+    /// Time Stamp Format Pattern string. used for DisplayMessage method.
+    /// </summary>
+    private const string _TIME_STAMP_FORMAT_PATTERN = "HH:mm:ss";
 
-    public ConsoleUI(MessageQueue messageQueue)
-    {
-        _messageQueue = messageQueue;
-    }
+    /// <summary>
+    /// 
+    /// </summary>
+    private const string _HELP_MESSAGE = 
+    """
+        Supported Commands:
+        /help                - Show this help message
+        /connect <ip> <port> - Connect to a peer
+        /list <port>         - Start listening for connections
+        /peers               - List known peers
+        /history             - View message history
+        /quit                - Exit the application
+        /exit                - End current session
+    """;
+    public ConsoleUI() {}
 
     /// <summary>
     /// Display a received message to the console.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Format the timestamp as "HH:mm:ss"
-    /// 2. Print in format: "[timestamp] sender: content"
     /// </summary>
     public void DisplayMessage(Message message)
     {
-        throw new NotImplementedException("Implement DisplayMessage() - see TODO in comments above");
+        Console.WriteLine($"[{message.Timestamp.ToString(_TIME_STAMP_FORMAT_PATTERN)}] {message.Sender}: {message.Content}");
     }
 
     /// <summary>
@@ -46,42 +57,62 @@ public class ConsoleUI
     /// </summary>
     public void DisplaySystem(string message)
     {
-        throw new NotImplementedException("Implement DisplaySystem() - see TODO in comments above");
+        Console.WriteLine($"[System] {message}");
     }
 
     /// <summary>
     /// Show available commands to the user.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Print a formatted help message showing all available commands
-    /// 2. Include: /connect, /listen, /peers, /history, /quit
     /// </summary>
     public void ShowHelp()
     {
-        throw new NotImplementedException("Implement ShowHelp() - see TODO in comments above");
+        Console.WriteLine(_HELP_MESSAGE);
     }
 
     /// <summary>
     /// Parse user input and return a CommandResult.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Check if input starts with "/" - if not, it's a regular message:
-    ///    - Return CommandResult with IsCommand = false, Message = input
-    ///
-    /// 2. If it's a command, split by spaces and parse:
-    ///    - "/connect <ip> <port>" -> CommandType.Connect with Args = [ip, port]
-    ///    - "/listen <port>" -> CommandType.Listen with Args = [port]
-    ///    - "/peers" -> CommandType.ListPeers
-    ///    - "/history" -> CommandType.History
-    ///    - "/quit" or "/exit" -> CommandType.Quit
-    ///    - Unknown command -> CommandType.Unknown with error message
-    ///
-    /// Hint: Use string.Split(' ', StringSplitOptions.RemoveEmptyEntries)
-    /// Hint: Use a switch expression for clean command matching
     /// </summary>
     public CommandResult ParseCommand(string input)
     {
-        throw new NotImplementedException("Implement ParseCommand() - see TODO in comments above");
+        CommandResult result = new CommandResult();
+        if (input.Length == 0 || input[0] != '/')
+        {
+            result.IsCommand = false;
+            result.Message = input;
+            return result;
+        }
+
+        result.IsCommand = true;
+        var tokens = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        result.Args = tokens;
+        switch(tokens[0].ToLower())
+        {
+            case "/connect":
+                result.CommandType = CommandType.Connect;
+                break;
+            case "/help":
+                result.CommandType = CommandType.Help;
+                break;
+            case "/listen":
+                result.CommandType = CommandType.Listen;
+                break;
+            case "/peers":
+                result.CommandType = CommandType.ListPeers;
+                break;
+            case "/history":
+                result.CommandType = CommandType.History;
+                break;
+            case "/quit":
+                result.CommandType = CommandType.Quit;
+                break;
+            case "/exit":
+                result.CommandType = CommandType.Exit;
+                break;
+            default:
+                result.CommandType = CommandType.Unknown;
+                result.Message = $"Command {tokens[0]} not valid. Use /help to list valid commands.";
+                break;
+        }
+        return result;
     }
 }
 
@@ -91,11 +122,13 @@ public class ConsoleUI
 public enum CommandType
 {
     Unknown,
+    Help,
     Connect,
     Listen,
     ListPeers,
     History,
-    Quit
+    Quit,
+    Exit
 }
 
 /// <summary>
