@@ -77,7 +77,7 @@ class Program
         // 5. Create TcpClientHandler for outgoing connections          X
 
         var messageQueuey = new MessageQueue();         //creates message queue guy
-        var consoley = new ConsoleUI(messageQueuey);    // creates a console and put in the message guy
+        var consoley = new ConsoleUI();    // creates a console and put in the message guy
         var servery = new TcpServer();                  // TCP Server 
         var Clienty = new TcpClientHandler();           //TCP client handler
 
@@ -122,11 +122,17 @@ class Program
                     running = false;
                     break;
                 case CommandType.Connect:
-                //connect
+                    Clienty.ConnectAsync(resulty.Args[1], int.Parse(resulty.Args[2]));
+                    break;
                 case CommandType.Listen:
+                    servery.Start(int.Parse(resulty.Args[0]));
+                    break;
                 case CommandType.ListPeers:
                 case CommandType.History:
+                case CommandType.Help:
                 case CommandType.Unknown:
+                    Console.WriteLine("Command sdose not exist. ");
+                    break;
                 default:
                     Console.WriteLine("Command not yet implemented. See TODO comments.");
                     break;
