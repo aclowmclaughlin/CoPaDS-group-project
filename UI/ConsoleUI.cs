@@ -31,6 +31,7 @@ public class ConsoleUI
     private const string _HELP_MESSAGE = 
     """
         Supported Commands:
+        /help                - Show this help message
         /connect <ip> <port> - Connect to a peer
         /list <port>         - Start listening for connections
         /peers               - List known peers
@@ -95,6 +96,9 @@ public class ConsoleUI
             case "/connect":
                 result.CommandType = CommandType.Connect;
                 break;
+            case "/help":
+                result.CommandType = CommandType.Help;
+                break;
             case "/listen":
                 result.CommandType = CommandType.Listen;
                 break;
@@ -125,6 +129,7 @@ public class ConsoleUI
 public enum CommandType
 {
     Unknown,
+    Help,
     Connect,
     Listen,
     ListPeers,
