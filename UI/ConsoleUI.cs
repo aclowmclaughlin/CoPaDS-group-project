@@ -83,14 +83,7 @@ public class ConsoleUI
 
         result.IsCommand = true;
         var tokens = input.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var args = tokens[1..];
-        if (args.Length > 0)
-        {
-            result.Args = args;
-        } else
-        {
-            result.Args = null;
-        }
+        result.Args = tokens;
         switch(tokens[0].ToLower())
         {
             case "/connect":
