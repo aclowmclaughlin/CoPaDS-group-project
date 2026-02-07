@@ -62,6 +62,8 @@ class Program
     // private static ConsoleUI? _consoleUI;
     // private static CancellationTokenSource? _cancellationTokenSource;
 
+
+
     
     
     static async Task Main(string[] args)
@@ -70,11 +72,13 @@ class Program
         Console.WriteLine("============================");
 
         // TODO: Initialize components
-        // 1. Create CancellationTokenSource for shutdown signaling
+        // 1. Create CancellationTokenSource for shutdown signaling     X
         // 2. Create MessageQueue for thread communication              X
         // 3. Create ConsoleUI for user interface                       X
         // 4. Create TcpServer for incoming connections                 X
         // 5. Create TcpClientHandler for outgoing connections          X
+
+        var CancellationTokenSource = new CancellationToken();
 
         var messageQueuey = new MessageQueue();         //creates message queue guy
         var consoley = new ConsoleUI();    // creates a console and put in the message guy
@@ -86,6 +90,8 @@ class Program
         // 2. TcpServer.OnMessageReceived - handle received messages
         // 3. TcpServer.OnPeerDisconnected - handle disconnections
         // 4. TcpClientHandler events (same pattern)
+
+
 
         // TODO: Start background threads
         // 1. Start a thread/task for processing incoming messages
@@ -130,6 +136,8 @@ class Program
                 case CommandType.ListPeers:
                 case CommandType.History:
                 case CommandType.Help:
+                    consoley.ShowHelp();
+                    break;
                 case CommandType.Unknown:
                     Console.WriteLine("Command sdose not exist. ");
                     break;
@@ -145,6 +153,8 @@ class Program
         // 3. Disconnect all clients
         // 4. Complete the MessageQueue
         // 5. Wait for background threads to finish
+
+        
 
         Console.WriteLine("Goodbye!");
     }
