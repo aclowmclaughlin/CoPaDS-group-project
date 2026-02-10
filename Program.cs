@@ -1,4 +1,4 @@
-// Team 7: Rue Clow-McLaughli, Devlin Gallagher, Nicholas Merante, Sophie Duquette
+// Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
@@ -56,15 +56,12 @@ class Program
 {
     // TODO: Declare your components as fields if needed for access across methods
     // Examples:
-    // private static MessageQueue? _messageQueue;
-    // private static TcpServer? _tcpServer;
-    // private static TcpClientHandler? _tcpClientHandler;
-    // private static ConsoleUI? _consoleUI;
-    // private static CancellationTokenSource? _cancellationTokenSource;
+     private static MessageQueue? _messageQueue;
+     private static TcpServer? _tcpServer;
+     private static TcpClientHandler? _tcpClientHandler;
+     private static ConsoleUI? _consoleUI;
+     private static CancellationTokenSource? _cancellationTokenSource;
 
-
-
-    
     
     static async Task Main(string[] args)
     {
@@ -78,12 +75,12 @@ class Program
         // 4. Create TcpServer for incoming connections                 X
         // 5. Create TcpClientHandler for outgoing connections          X
 
-        var CancellationTokenSource = new CancellationToken();
+        _cancellationTokenSource =new CancellationTokenSource();
 
-        var messageQueuey = new MessageQueue();         //creates message queue guy
-        var consoley = new ConsoleUI();    // creates a console and put in the message guy
-        var servery = new TcpServer();                  // TCP Server 
-        var Clienty = new TcpClientHandler();           //TCP client handler
+        _messageQueue = new MessageQueue();         //creates message queue guy
+        _consoleUI = new ConsoleUI();    // creates a console and put in the message guy
+        _tcpServer = new TcpServer();                  // TCP Server 
+        _tcpClientHandler = new TcpClientHandler();           //TCP client handler
 
         // TODO: Subscribe to events
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
@@ -108,39 +105,44 @@ class Program
             // TODO: Implement the main input loop
             // 1. Read a line from the console                      X
             // 2. Skip empty input                                  X
-            // 3. Parse the input using ConsoleUI.ParseCommand()    
-            // 4. Handle the command based on CommandType:
-            //    - Connect: Call TcpClientHandler.ConnectAsync()
-            //    - Listen: Call TcpServer.Start()
+            // 3. Parse the input using ConsoleUI.ParseCommand()    X
+            // 4. Handle the command based on CommandType:          X
+            //    - Connect: Call TcpClientHandler.ConnectAsync()   X
+            //    - Listen: Call TcpServer.Start()                  X
             //    - ListPeers: Display connected peers
             //    - History: Show message history
-            //    - Quit: Set running = false
+            //    - Quit: Set running = false                       X
             //    - Not a command: Send as a message to peers
 
             var input = Console.ReadLine();
             if (string.IsNullOrEmpty(input)) continue;
 
-            var resulty = consoley.ParseCommand(input);
+            var resulty = _consoleUI.ParseCommand(input);
             // Temporary basic command handling - replace with full implementation
             switch (resulty.CommandType)
             {
                 case CommandType.Quit:
                     running = false;
                     break;
+
                 case CommandType.Connect:
-                    Clienty.ConnectAsync(resulty.Args[1], int.Parse(resulty.Args[2]));
+                    _tcpClientHandler.ConnectAsync(resulty.Args[1], int.Parse(resulty.Args[2]));
                     break;
+
                 case CommandType.Listen:
-                    servery.Start(int.Parse(resulty.Args[0]));
+                    _tcpServer.Start(int.Parse(resulty.Args[0]));
                     break;
+
                 case CommandType.ListPeers:
                 case CommandType.History:
                 case CommandType.Help:
-                    consoley.ShowHelp();
+                    _consoleUI.ShowHelp();
                     break;
+
                 case CommandType.Unknown:
-                    Console.WriteLine("Command sdose not exist. ");
+                    Console.WriteLine("Command dose not exist. ");
                     break;
+
                 default:
                     Console.WriteLine("Command not yet implemented. See TODO comments.");
                     break;
