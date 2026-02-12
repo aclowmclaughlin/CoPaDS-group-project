@@ -1,5 +1,8 @@
 // Team 7: Rue Clow-McLaughli, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
+// gh pr create --base main --head possumgod/tcp_client --title "Add [functions implemented]" --body "[desc of functions, any issues, etc]"
+// check MessageQueue, TcpServer
+
 
 using System.Net;
 using System.Net.Sockets;
@@ -60,6 +63,7 @@ public class TcpClientHandler
         throw new NotImplementedException("Implement ReceiveLoop() - see TODO in comments above");
 
         // StreamReader
+        // 
     }
 
     /// <summary>
@@ -87,6 +91,7 @@ public class TcpClientHandler
     public async Task BroadcastAsync(string message)
     {
         throw new NotImplementedException("Implement BroadcastAsync() - see TODO in comments above");
+        /// 
     }
 
     /// <summary>
@@ -102,6 +107,13 @@ public class TcpClientHandler
     public void Disconnect(string peerId)
     {
         throw new NotImplementedException("Implement Disconnect() - see TODO in comments above");
+        /// find peer from peerID
+        /// lock peer
+        /// remove from _connections
+        /// if remove happened (?)
+        /// set IsConnected = False
+        /// end client & stream
+        /// call OnDisconnected()
     }
 
     /// <summary>
