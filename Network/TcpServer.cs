@@ -27,105 +27,190 @@ public class TcpServer
 
     /// <summary>
     /// Start listening for incoming connections on the specified port.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Store the port number
-    /// 2. Create a new CancellationTokenSource
-    /// 3. Create and start a TcpListener on IPAddress.Any and the specified port
-    /// 4. Set IsListening to true
-    /// 5. Create and start a new Thread running ListenLoop
-    /// 6. Print a message indicating the server is listening
     /// </summary>
     public void Start(int port)
     {
-        throw new NotImplementedException("Implement Start() - see TODO in comments above");
+        Console.WriteLine($"Starting server...");
+        // Store the port number
+        Port = port;
+
+        // Create a new CancellationTokenSource
+        _cancellationTokenSource = new CancellationTokenSource();
+
+        // Create and start a TcpListener on IPAddress.Any and the specified port
+        _listener = new TcpListener(IPAddress.Any, port);
+        _listener.Start();
+
+        // Set IsListening to true
+        IsListening = true;
+
+        // Create and start a new Thread running ListenLoop
+        _listenThread = new Thread(ListenLoop);
+        _listenThread.Start();
+
+        // Print a message indicating the server is listening
+        Console.WriteLine($"Server started and listening on port {port}");
     }
 
     /// <summary>
     /// Main loop that accepts incoming connections.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Loop while cancellation is not requested
-    /// 2. Check if a connection is pending using _listener.Pending()
-    /// 3. If pending, accept the connection with AcceptTcpClient()
-    /// 4. Call HandleNewConnection with the new client
-    /// 5. If not pending, sleep briefly (e.g., 100ms) to avoid busy-waiting
-    /// 6. Handle SocketException and IOException appropriately
     /// </summary>
     private void ListenLoop()
     {
-        throw new NotImplementedException("Implement ListenLoop() - see TODO in comments above");
+        try
+        {
+            // Loop while cancellation is not requested
+            while(!_cancellationTokenSource!.Token.IsCancellationRequested)
+            {
+                // Check if a connection is pending using _listener.Pending()
+                if(_listener!.Pending())
+                {
+                    // If pending, accept the connection with AcceptTcpClient()
+                    var client = _listener.AcceptTcpClient();
+                    // Call HandleNewConnection with the new client
+                    HandleNewConnection(client);
+                }
+                else
+                {
+                    // If not pending, sleep briefly (e.g., 100ms) to avoid busy-waiting
+                    Thread.Sleep(100);
+                }
+            }
+        }
+        catch (SocketException e) // Handle SocketException
+        {
+            Console.WriteLine($"Socket exception: {e.Message}");
+        }
+        catch (IOException e) // Handle IOException appropriately
+        {
+            Console.WriteLine($"IO exception: {e.Message}");
+        }
     }
 
     /// <summary>
     /// Handle a new incoming connection by creating a Peer and starting its receive thread.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a new Peer object with:
-    ///    - Client = the TcpClient
-    ///    - Stream = client.GetStream()
-    ///    - Address = extracted from client.Client.RemoteEndPoint
-    ///    - Port = extracted from client.Client.RemoteEndPoint
-    ///    - IsConnected = true
-    /// 2. Add the peer to _connectedPeers (with proper locking)
-    /// 3. Invoke OnPeerConnected event
-    /// 4. Create and start a new Thread running ReceiveLoop for this peer
     /// </summary>
     private void HandleNewConnection(TcpClient client)
     {
-        throw new NotImplementedException("Implement HandleNewConnection() - see TODO in comments above");
+        // Create a new Peer object with:
+        // - Client = the TcpClient
+        // - Stream = client.GetStream()
+        // - Address = extracted from client.Client.RemoteEndPoint
+        // - Port = extracted from client.Client.RemoteEndPoint
+        // - IsConnected = true
+        var peer = new Peer {
+            Client = client,
+            Stream = client.GetStream(),
+            Address = ((IPEndPoint)client.Client.RemoteEndPoint!).Address,
+            Port = ((IPEndPoint)client.Client.RemoteEndPoint!).Port,
+            IsConnected = true
+        };
+
+        // Add the peer to _connectedPeers (with proper locking)
+        lock(_connectedPeers)
+        {
+            _connectedPeers.Add(peer);
+        }
+
+        // Invoke OnPeerConnected event
+        OnPeerConnected?.Invoke(peer);
+
+        // Create and start a new Thread running ReceiveLoop for this peer
+        var receiveThread = new Thread(() => ReceiveLoop(peer));
+        receiveThread.Start();
     }
 
     /// <summary>
     /// Receive loop for a specific peer - reads messages until disconnection.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a StreamReader from the peer's stream
-    /// 2. Loop while peer is connected and cancellation not requested
-    /// 3. Read a line from the stream (ReadLine blocks until data available)
-    /// 4. If line is null, the connection was closed - break the loop
-    /// 5. Create a Message object with the received content
-    /// 6. Invoke OnMessageReceived event with the peer and message
-    /// 7. Handle IOException (connection lost)
-    /// 8. In finally block, call DisconnectPeer
     /// </summary>
     private void ReceiveLoop(Peer peer)
     {
-        throw new NotImplementedException("Implement ReceiveLoop() - see TODO in comments above");
+        try
+        {
+            // Create a StreamReader from the peer's stream
+            using var reader = new StreamReader(peer.Stream!);
+
+            // Loop while peer is connected and cancellation not requested
+            while(peer.IsConnected && !_cancellationTokenSource!.Token.IsCancellationRequested)
+            {
+                // Read a line from the stream (ReadLine blocks until data available)
+                var line = reader.ReadLine();
+
+                // If line is null, the connection was closed - break the loop
+                if(line == null)
+                    break;
+                
+                // Create a Message object with the received content
+                var message = new Message {
+                    Sender = peer.Name,
+                    Content = line,
+                    Timestamp = DateTime.Now
+                };
+
+                // Invoke OnMessageReceived event with the peer and message
+                OnMessageReceived?.Invoke(peer, message);
+            }
+        }
+        catch(IOException e) // Handle IOException (connection lost)
+        {
+            Console.WriteLine($"Connection Lost - IO exception: {e.Message}");
+        }
+        finally // In finally block, call DisconnectPeer
+        {
+            DisconnectPeer(peer);
+        }
     }
 
     /// <summary>
     /// Clean up a disconnected peer.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Set peer.IsConnected to false
-    /// 2. Dispose the peer's Client and Stream
-    /// 3. Remove the peer from _connectedPeers (with proper locking)
-    /// 4. Invoke OnPeerDisconnected event
     /// </summary>
     private void DisconnectPeer(Peer peer)
     {
-        throw new NotImplementedException("Implement DisconnectPeer() - see TODO in comments above");
+        // Set peer.IsConnected to false
+        peer.IsConnected = false;
+        // Dispose the peer's Client and Stream
+        peer.Client?.Dispose();
+        peer.Stream?.Dispose();
+
+        // Remove the peer from _connectedPeers (with proper locking)
+        lock(_connectedPeers)
+        {
+            _connectedPeers.Remove(peer);
+        }
+
+        // Invoke OnPeerDisconnected event
+        OnPeerDisconnected?.Invoke(peer);
     }
 
     /// <summary>
     /// Stop the server and close all connections.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Cancel the cancellation token
-    /// 2. Stop the listener
-    /// 3. Set IsListening to false
-    /// 4. Disconnect all connected peers (with proper locking)
-    /// 5. Wait for the listen thread to finish (with timeout)
     /// </summary>
     public void Stop()
     {
-        throw new NotImplementedException("Implement Stop() - see TODO in comments above");
+        // Cancel the cancellation token
+        _cancellationTokenSource?.Cancel();
+
+        // Stop the listener
+        _listener?.Stop();
+
+        // Set IsListening to false
+        IsListening = false;
+        
+        // Disconnect all connected peers (with proper locking)
+        lock(_connectedPeers)
+        {
+            foreach(Peer peer in _connectedPeers.ToList())
+            {
+                DisconnectPeer(peer);
+            }
+        }
+        
+        // Wait for the listen thread to finish (with timeout)
+        _listenThread?.Join(1000);
     }
 
     /// <summary>
     /// Get a list of currently connected peers.
-    /// Remember to use proper locking when accessing _connectedPeers.
     /// </summary>
     public IEnumerable<Peer> GetConnectedPeers()
     {
