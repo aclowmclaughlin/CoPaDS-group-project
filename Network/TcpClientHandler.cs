@@ -1,6 +1,5 @@
 // Team 7: Rue Clow-McLaughli, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
-// gh pr create --base main --head possumgod/tcp_client --title "Add [functions implemented]" --body "[desc of functions, any issues, etc]"
 // check MessageQueue, TcpServer
 
 
