@@ -1,6 +1,5 @@
 // Team 7: Rue Clow-McLaughli, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
-// gh pr create --base main --head possumgod/tcp_client --title "Add [functions implemented]" --body "[desc of functions, any issues, etc]"
 // check MessageQueue, TcpServer
 
 
@@ -18,7 +17,7 @@ namespace SecureMessenger.Network;
 public class TcpClientHandler
 {
     private readonly Dictionary<string, Peer> _connections = new();
-    private readonly Lock _lock = new();
+    private readonly object _lock = new();
 
     public event Action<Peer>? OnConnected;
     public event Action<Peer>? OnDisconnected;
@@ -49,7 +48,7 @@ public class TcpClientHandler
 
             OnConnected?.Invoke(peer);
 
-            while (peer.IsConnected) await ReceiveLoop(peer);
+            _ = Task.Run(() => ReceiveLoop(peer));
             
             return true;
         }
@@ -59,9 +58,6 @@ public class TcpClientHandler
             Console.WriteLine($"Error: {SE.Message}");
             return false;
         }
-
-
-        // throw new NotImplementedException("Implement ConnectAsync() - see TODO in comments above");
     }
 
     /// <summary>
@@ -71,7 +67,7 @@ public class TcpClientHandler
     {
         try
         {
-            StreamReader stream = new StreamReader(peer.Stream); // possible null, fix later
+            StreamReader? stream = new StreamReader(peer.Stream); // possible null, fix later
             while (peer.IsConnected) {
                 var line = await stream.ReadLineAsync(); // need to wait until input
                 if (line == null) break;
@@ -85,8 +81,6 @@ public class TcpClientHandler
                 };
 
                 OnMessageReceived?.Invoke(peer, message);
-
-
             }
         
         }
@@ -99,7 +93,6 @@ public class TcpClientHandler
         {
             Disconnect(peer.Id);
         }
-        // throw new NotImplementedException("Implement ReceiveLoop() - see TODO in comments above");
     }
 
     /// <summary>
@@ -108,20 +101,19 @@ public class TcpClientHandler
     public async Task SendAsync(string peerId, string message)
     {  
         Peer? peer;
+        bool found = false;
         lock (_lock)
         {
             // if (_connections.ContainsKey(peerId)) { peer = _connections[peerId]; };
-            _connections.TryGetValue(peerId, out peer);
+            found = _connections.TryGetValue(peerId, out peer);
         }
 
-        if (peer?.Stream != null && peer.IsConnected == true)
+        if (found && peer?.Stream != null && peer.IsConnected == true)
         {
             StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
             stream.Write(message); // this also needs to be await, but gives "Cannot await 'void'" error
             await stream.FlushAsync();
         }
-
-        // throw new NotImplementedException("Implement SendAsync() - see TODO in comments above");
     }
 
     /// <summary>
@@ -140,7 +132,6 @@ public class TcpClientHandler
             await SendAsync(p.Id, message);
         }
         
-        // throw new NotImplementedException("Implement BroadcastAsync() - see TODO in comments above"); 
     }
 
     /// <summary>
@@ -161,7 +152,6 @@ public class TcpClientHandler
                 OnDisconnected?.Invoke(temp);
             }
         }
-        // throw new NotImplementedException("Implement Disconnect() - see TODO in comments above");
     }
 
     /// <summary>
