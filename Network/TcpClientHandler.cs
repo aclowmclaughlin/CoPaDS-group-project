@@ -60,7 +60,6 @@ public class TcpClientHandler
         }
 
 
-        // throw new NotImplementedException("Implement ConnectAsync() - see TODO in comments above");
     }
 
     /// <summary>
