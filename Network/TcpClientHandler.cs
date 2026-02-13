@@ -158,7 +158,6 @@ public class TcpClientHandler
                 OnDisconnected?.Invoke(temp);
             }
         }
-        // throw new NotImplementedException("Implement Disconnect() - see TODO in comments above");
     }
 
     /// <summary>
