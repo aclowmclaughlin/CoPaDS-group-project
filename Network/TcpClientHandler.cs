@@ -138,7 +138,6 @@ public class TcpClientHandler
             await SendAsync(p.Id, message);
         }
         
-        // throw new NotImplementedException("Implement BroadcastAsync() - see TODO in comments above"); 
     }
 
     /// <summary>
