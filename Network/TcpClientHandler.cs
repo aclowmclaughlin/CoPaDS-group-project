@@ -58,6 +58,8 @@ public class TcpClientHandler
             Console.WriteLine($"Error: {SE.Message}");
             return false;
         }
+
+
     }
 
     /// <summary>
