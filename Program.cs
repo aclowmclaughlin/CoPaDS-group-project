@@ -2,6 +2,7 @@
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
+using System.Diagnostics;
 using System.Globalization;
 using System.Net.Quic;
 using System.Net.Sockets;
@@ -62,7 +63,6 @@ class Program
      private static ConsoleUI? _consoleUI;
      private static CancellationTokenSource? _cancellationTokenSource;
 
-    
     static async Task Main(string[] args)
     {
         Console.WriteLine("Secure Distributed Messenger");
@@ -75,12 +75,11 @@ class Program
         // 4. Create TcpServer for incoming connections                 X
         // 5. Create TcpClientHandler for outgoing connections          X
 
-        _cancellationTokenSource =new CancellationTokenSource();
-
-        _messageQueue = new MessageQueue();         //creates message queue guy
-        _consoleUI = new ConsoleUI();    // creates a console and put in the message guy
-        _tcpServer = new TcpServer();                  // TCP Server 
-        _tcpClientHandler = new TcpClientHandler();           //TCP client handler
+        var cancellationTokenSource =new CancellationTokenSource();
+        var messageQueue = new MessageQueue();         //creates message queue guy
+        var consoleUI = new ConsoleUI();    // creates a console and put in the message guy
+        var tcpServer = new TcpServer();                  // TCP Server 
+        var tcpClientHandler = new TcpClientHandler();           //TCP client handler
 
         // TODO: Subscribe to events
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
@@ -94,6 +93,8 @@ class Program
         // 1. Start a thread/task for processing incoming messages
         // 2. Start a thread/task for sending outgoing messages
         // Note: TcpServer.Start() will create its own listen thread
+
+
 
         Console.WriteLine("Type /help for available commands");
         Console.WriteLine();
@@ -117,7 +118,7 @@ class Program
             var input = Console.ReadLine();
             if (string.IsNullOrEmpty(input)) continue;
 
-            var resulty = _consoleUI.ParseCommand(input);
+            var resulty = consoleUI.ParseCommand(input);
             // Temporary basic command handling - replace with full implementation
             switch (resulty.CommandType)
             {
@@ -126,17 +127,19 @@ class Program
                     break;
 
                 case CommandType.Connect:
-                    _tcpClientHandler.ConnectAsync(resulty.Args[1], int.Parse(resulty.Args[2]));
+                    tcpClientHandler.ConnectAsync(resulty.Args[1], int.Parse(resulty.Args[2]));
                     break;
 
                 case CommandType.Listen:
-                    _tcpServer.Start(int.Parse(resulty.Args[0]));
+                    tcpServer.Start(int.Parse(resulty.Args[0]));
                     break;
 
                 case CommandType.ListPeers:
+
+                    
                 case CommandType.History:
                 case CommandType.Help:
-                    _consoleUI.ShowHelp();
+                    consoleUI.ShowHelp();
                     break;
 
                 case CommandType.Unknown:
@@ -155,6 +158,7 @@ class Program
         // 3. Disconnect all clients
         // 4. Complete the MessageQueue
         // 5. Wait for background threads to finish
+
 
         
 
@@ -182,4 +186,24 @@ class Program
     // - SendOutgoingMessages() - background task to send queued messages
     // - HandlePeerConnected(Peer peer) - event handler for new connections
     // - HandleMessageReceived(Peer peer, Message message) - event handler for messages
+
+    private static void ProcessIncomingMessages()
+    {
+        
+    }
+
+    private static void SendOutgoingMessages()
+    {
+        
+    }
+
+    private static void HandlePerrConnected(Peer peer)
+    {
+        
+    }
+
+    private static void HandleMessageRecived(Peer peer, Message message)
+    {
+        
+    }
 }
