@@ -58,11 +58,6 @@ public class TcpClientHandler
             Console.WriteLine($"Error: {SE.Message}");
             return false;
         }
-<<<<<<< HEAD
-=======
-
-
->>>>>>> b78de65 (Update Network/TcpClientHandler.cs)
     }
 
     /// <summary>
