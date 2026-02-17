@@ -70,11 +70,11 @@
 
 - [ ] Multi-threaded architecture
 - [x] Thread-safe message queue - Rue
-- [ ] TCP server (listen for connections)
+- [x] TCP server (listen for connections)
 - [x] TCP client (connect to peers) - Devlin
 - [ ] Send/receive text messages
 - [ ] Graceful disconnection handling
-- [ ] Console UI with commands - Rue
+- [x] Console UI with commands - Rue
 
 ---
 
