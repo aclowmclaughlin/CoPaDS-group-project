@@ -57,11 +57,11 @@ class Program
 {
     // TODO: Declare your components as fields if needed for access across methods
     // Examples:
-     private static MessageQueue? _messageQueue;
-     private static TcpServer? _tcpServer;
-     private static TcpClientHandler? _tcpClientHandler;
-     private static ConsoleUI? _consoleUI;
-     private static CancellationTokenSource? _cancellationTokenSource;
+     private static MessageQueue? messageQueue;
+     private static TcpServer? tcpServer;
+     private static TcpClientHandler? tcpClientHandler;
+     private static ConsoleUI? consoleUI;
+     private static CancellationTokenSource? cancellationTokenSource;
 
     static async Task Main(string[] args)
     {
@@ -75,11 +75,11 @@ class Program
         // 4. Create TcpServer for incoming connections                 X
         // 5. Create TcpClientHandler for outgoing connections          X
 
-        var cancellationTokenSource =new CancellationTokenSource();
-        var messageQueue = new MessageQueue();         //creates message queue guy
-        var consoleUI = new ConsoleUI();    // creates a console and put in the message guy
-        var tcpServer = new TcpServer();                  // TCP Server 
-        var tcpClientHandler = new TcpClientHandler();           //TCP client handler
+        cancellationTokenSource =new CancellationTokenSource();
+        messageQueue = new MessageQueue();         //creates message queue guy
+        consoleUI = new ConsoleUI();    // creates a console and put in the message guy
+        tcpServer = new TcpServer();                  // TCP Server 
+        tcpClientHandler = new TcpClientHandler();           //TCP client handler
 
         // TODO: Subscribe to events
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
@@ -87,6 +87,16 @@ class Program
         // 3. TcpServer.OnPeerDisconnected - handle disconnections
         // 4. TcpClientHandler events (same pattern)
 
+        tcpServer.OnPeerConnected += HandlePeerConnected;
+        tcpServer.OnMessageReceived += HandleMessageRecived;
+        tcpServer.OnPeerDisconnected += peer =>
+            Console.WriteLine("Disconnected ;)");
+
+        
+        tcpClientHandler.OnConnected+= HandlePeerConnected;
+        tcpClientHandler.OnMessageReceived+= HandleMessageRecived;
+        tcpClientHandler.OnDisconnected += peer =>
+            Console.WriteLine("disconnected ;)");
 
 
         // TODO: Start background threads
@@ -94,7 +104,8 @@ class Program
         // 2. Start a thread/task for sending outgoing messages
         // Note: TcpServer.Start() will create its own listen thread
 
-
+        _ = Task.Run(ProcessIncomingMessages);
+        _ = Task.Run(SendOutgoingMessages);
 
         Console.WriteLine("Type /help for available commands");
         Console.WriteLine();
@@ -127,16 +138,14 @@ class Program
                     break;
 
                 case CommandType.Connect:
-                    tcpClientHandler.ConnectAsync(resulty.Args[1], int.Parse(resulty.Args[2]));
+                    tcpClientHandler.ConnectAsync(resulty.Args[0], int.Parse(resulty.Args[1]));
                     break;
 
                 case CommandType.Listen:
                     tcpServer.Start(int.Parse(resulty.Args[0]));
                     break;
 
-                case CommandType.ListPeers:
-
-                    
+                case CommandType.ListPeers: //these two have no info on them, I cannot find any other ref to these names
                 case CommandType.History:
                 case CommandType.Help:
                     consoleUI.ShowHelp();
@@ -147,7 +156,10 @@ class Program
                     break;
 
                 default:
-                    Console.WriteLine("Command not yet implemented. See TODO comments.");
+                    messageQueue!.EnqueueOutgoing(
+                        new Message
+                        {Content = input});
+                    
                     break;
             }
         }
@@ -159,8 +171,12 @@ class Program
         // 4. Complete the MessageQueue
         // 5. Wait for background threads to finish
 
+        cancellationTokenSource!.Cancel();
 
-        
+        tcpServer?.Stop();
+        //tcpClientHandler.Disconnect();        not implemented in file, is this smth we need still?
+        messageQueue?.CompleteAdding();
+
 
         Console.WriteLine("Goodbye!");
     }
@@ -189,21 +205,35 @@ class Program
 
     private static void ProcessIncomingMessages()
     {
-        
+        while (!cancellationTokenSource!.Token.IsCancellationRequested){
+            var msg = messageQueue!.DequeueIncoming();
+
+            if (msg != null)
+                {
+                    Console.WriteLine($"[{msg.Id}] {msg.Content}");
+                }
+            }
     }
 
     private static void SendOutgoingMessages()
     {
-        
+        while (!cancellationTokenSource!.Token.IsCancellationRequested){ 
+            var msg = messageQueue!.DequeueOutgoing();
+
+            if (msg != null)
+            {
+                //send her out
+            }
+        }
     }
 
-    private static void HandlePerrConnected(Peer peer)
+    private static void HandlePeerConnected(Peer peer)
     {
-        
+        Console.WriteLine("Connected to" + peer.Id + "*Trasformer noises*");
     }
 
     private static void HandleMessageRecived(Peer peer, Message message)
     {
-        
+        messageQueue!.EnqueueIncoming(message); //oh yeah enque that message
     }
 }
