@@ -1,6 +1,10 @@
 // Team 7: Rue Clow-McLaughli, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
+// check MessageQueue, TcpServer
 
+
+using System.Data;
+using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
 using SecureMessenger.Core;
@@ -21,85 +25,133 @@ public class TcpClientHandler
 
     /// <summary>
     /// Connect to a peer at the specified address and port.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a new TcpClient
-    /// 2. Connect asynchronously to the host and port
-    /// 3. Create a Peer object with:
-    ///    - Client = the TcpClient
-    ///    - Stream = client.GetStream()
-    ///    - Address = parsed from host string
-    ///    - Port = the port parameter
-    ///    - IsConnected = true
-    /// 4. Add to _connections dictionary (with proper locking)
-    /// 5. Invoke OnConnected event
-    /// 6. Start a background task running ReceiveLoop for this peer
-    /// 7. Return true on success
-    /// 8. Handle SocketException - print error and return false
     /// </summary>
     public async Task<bool> ConnectAsync(string host, int port)
     {
-        throw new NotImplementedException("Implement ConnectAsync() - see TODO in comments above");
+        //TODO: add error other handling? (cringe)
+        try
+        {
+            var client = new TcpClient();
+            await client.ConnectAsync(host, port);
+            
+            // Core\Peer.cs
+            var peer = new Peer 
+            {
+                Client = client,
+                Stream = client.GetStream(),
+                Address = IPAddress.Parse(host), // thank you System.Net
+                Port = port,
+                IsConnected = true
+            };
+
+            lock(_lock) { _connections[peer.Id] = peer; };
+
+            OnConnected?.Invoke(peer);
+
+            _ = Task.Run(() => ReceiveLoop(peer));
+            
+            return true;
+        }
+        
+        catch (SocketException SE) 
+        {
+            Console.WriteLine($"Error: {SE.Message}");
+            return false;
+        }
     }
 
     /// <summary>
     /// Receive loop for a connected peer - reads messages until disconnection.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a StreamReader from the peer's stream
-    /// 2. Loop while peer is connected
-    /// 3. Read a line asynchronously (ReadLineAsync)
-    /// 4. If line is null, connection was closed - break
-    /// 5. Create a Message object with the received content
-    /// 6. Invoke OnMessageReceived event
-    /// 7. Handle IOException (connection lost)
-    /// 8. In finally block, call Disconnect
     /// </summary>
     private async Task ReceiveLoop(Peer peer)
     {
-        throw new NotImplementedException("Implement ReceiveLoop() - see TODO in comments above");
+        try
+        {
+            StreamReader? stream = new StreamReader(peer.Stream); // possible null, fix later
+            while (peer.IsConnected) {
+                var line = await stream.ReadLineAsync(); // need to wait until input
+                if (line == null) break;
+
+                // core/message.cs
+                var message = new Message
+                {
+                    Sender = peer.Name,
+                    Content = line,
+                    Timestamp = DateTime.UtcNow
+                };
+
+                OnMessageReceived?.Invoke(peer, message);
+            }
+        
+        }
+
+        catch (IOException IOE){
+            Console.WriteLine($"Connection lost: {IOE.Message}");
+        }
+        
+        finally
+        {
+            Disconnect(peer.Id);
+        }
     }
 
     /// <summary>
     /// Send a message to a specific peer.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Look up the peer in _connections by peerId (with proper locking)
-    /// 2. If peer exists and is connected with a valid stream:
-    ///    - Create a StreamWriter (with leaveOpen: true)
-    ///    - Write the message line asynchronously
-    ///    - Flush the writer
     /// </summary>
     public async Task SendAsync(string peerId, string message)
-    {
-        throw new NotImplementedException("Implement SendAsync() - see TODO in comments above");
+    {  
+        Peer? peer;
+        bool found = false;
+        lock (_lock)
+        {
+            // if (_connections.ContainsKey(peerId)) { peer = _connections[peerId]; };
+            found = _connections.TryGetValue(peerId, out peer);
+        }
+
+        if (found && peer?.Stream != null && peer.IsConnected == true)
+        {
+            StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
+            stream.Write(message); // this also needs to be await, but gives "Cannot await 'void'" error
+            await stream.FlushAsync();
+        }
     }
 
     /// <summary>
     /// Broadcast a message to all connected peers.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Get a copy of all peers (with proper locking)
-    /// 2. Loop through each peer and call SendAsync
     /// </summary>
     public async Task BroadcastAsync(string message)
     {
-        throw new NotImplementedException("Implement BroadcastAsync() - see TODO in comments above");
+        List<Peer> allPeers;
+        lock (_lock)
+        {
+            allPeers = _connections.Values.ToList();
+        }
+
+        foreach (Peer p in allPeers)
+        {
+            await SendAsync(p.Id, message);
+        }
+        
     }
 
     /// <summary>
     /// Disconnect from a peer.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Remove the peer from _connections (with proper locking)
-    /// 2. If peer was found:
-    ///    - Set IsConnected to false
-    ///    - Dispose the Client and Stream
-    ///    - Invoke OnDisconnected event
     /// </summary>
     public void Disconnect(string peerId)
-    {
-        throw new NotImplementedException("Implement Disconnect() - see TODO in comments above");
+    {  
+        Peer? temp;
+        lock (_lock)
+        {
+            _connections.TryGetValue(peerId, out temp);
+            if (temp != null)
+            {
+                _connections.Remove(peerId);
+                temp.IsConnected = false;
+                temp.Client?.Dispose();
+                temp.Stream?.Dispose();
+                OnDisconnected?.Invoke(temp);
+            }
+        }
     }
 
     /// <summary>
