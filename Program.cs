@@ -73,7 +73,7 @@ class Program
         // 4. Create TcpServer for incoming connections                 X
         // 5. Create TcpClientHandler for outgoing connections          X
 
-        cancellationTokenSource =new CancellationTokenSource();
+        cancellationTokenSource = new CancellationTokenSource();
         messageQueue = new MessageQueue();         //creates message queue guy
         consoleUI = new ConsoleUI();    // creates a console and put in the message guy
         tcpServer = new TcpServer();                  // TCP Server 
