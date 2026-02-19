@@ -87,7 +87,7 @@ class Program
         tcpServer.OnPeerConnected += HandlePeerConnected;
         tcpServer.OnMessageReceived += HandleMessageRecived;
         tcpServer.OnPeerDisconnected += peer =>
-            Console.WriteLine("Disconnected ;)");
+            Console.WriteLine("Disconnected");
 
         
         tcpClientHandler.OnConnected+= HandlePeerConnected;
