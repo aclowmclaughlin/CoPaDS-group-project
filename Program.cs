@@ -149,7 +149,7 @@ class Program
                     break;
 
                 case CommandType.Unknown:
-                    Console.WriteLine("Command dose not exist. ");
+                    Console.WriteLine("Command does not exist. ");
                     break;
 
                 default:
