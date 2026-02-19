@@ -62,6 +62,8 @@ class Program
      private static ConsoleUI? consoleUI;
      private static CancellationTokenSource? cancellationTokenSource;
 
+    public static int peery;
+
     static async Task Main(string[] args)
     {
         Console.WriteLine("Secure Distributed Messenger");
@@ -135,6 +137,7 @@ class Program
                     break;
 
                 case CommandType.Connect:
+                    peery = int.Parse(resulty.Args[1]);
                     tcpClientHandler.ConnectAsync(resulty.Args[0], int.Parse(resulty.Args[1]));
                     break;
 
@@ -171,7 +174,7 @@ class Program
         cancellationTokenSource!.Cancel();
 
         tcpServer?.Stop();
-        //tcpClientHandler.Disconnect();        not implemented in file, is this smth we need still?
+        tcpClientHandler.Disconnect(peery.ToString());        //not implemented in file, is this smth we need still?
         messageQueue?.CompleteAdding();
 
 
