@@ -33,7 +33,7 @@ public class ConsoleUI
         Supported Commands:
         /help                - Show this help message
         /connect <ip> <port> - Connect to a peer
-        /list <port>         - Start listening for connections
+        /listen <port>         - Start listening for connections
         /peers               - List known peers
         /history             - View message history
         /quit                - Exit the application
