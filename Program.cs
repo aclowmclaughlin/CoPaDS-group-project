@@ -68,7 +68,6 @@ class Program
         Console.WriteLine("Secure Distributed Messenger");
         Console.WriteLine("============================");
 
-        // TODO: Initialize components
         // 1. Create CancellationTokenSource for shutdown signaling     X
         // 2. Create MessageQueue for thread communication              X
         // 3. Create ConsoleUI for user interface                       X
