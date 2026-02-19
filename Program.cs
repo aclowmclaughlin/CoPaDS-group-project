@@ -55,7 +55,6 @@ namespace SecureMessenger;
 /// </summary>
 class Program
 {
-    // TODO: Declare your components as fields if needed for access across methods
     // Examples:
      private static MessageQueue? messageQueue;
      private static TcpServer? tcpServer;
