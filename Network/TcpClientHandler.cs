@@ -155,6 +155,23 @@ public class TcpClientHandler
     }
 
     /// <summary>
+    /// Disconnect all peers in Connections dict
+    /// </summary>
+    public void DisconnectAll()
+    {
+        List<Peer> allPeers;
+        lock (_lock)
+        {
+            allPeers = _connections.Values.ToList();
+        }
+
+        foreach (Peer p in allPeers)
+        {
+            Disconnect(p.Id);
+        }
+    }
+
+    /// <summary>
     /// Get all currently connected peers.
     /// Remember to use proper locking when accessing _connections.
     /// </summary>
