@@ -79,7 +79,6 @@ class Program
         tcpServer = new TcpServer();                  // TCP Server 
         tcpClientHandler = new TcpClientHandler();           //TCP client handler
 
-        // TODO: Subscribe to events
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
         // 2. TcpServer.OnMessageReceived - handle received messages
         // 3. TcpServer.OnPeerDisconnected - handle disconnections
