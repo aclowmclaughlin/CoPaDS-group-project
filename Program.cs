@@ -57,13 +57,15 @@ namespace SecureMessenger;
 class Program
 {
     // Examples:
+
+    // creates objects for all the items used below
      private static MessageQueue? messageQueue;
      private static TcpServer? tcpServer;
      private static TcpClientHandler? tcpClientHandler;
      private static ConsoleUI? consoleUI;
      private static CancellationTokenSource? cancellationTokenSource;
 
-     //private static MessageHistory? messageHistory;
+     //private static MessageHistory? messageHistory;   <--not implemented, will use later 
 
     public static int peery;
 
@@ -94,7 +96,6 @@ class Program
         tcpServer.OnMessageReceived += HandleMessageRecived;
         tcpServer.OnPeerDisconnected += peer =>
             Console.WriteLine("Disconnected");
-
         
         tcpClientHandler.OnConnected+= HandlePeerConnected;
         tcpClientHandler.OnMessageReceived+= HandleMessageRecived;
@@ -133,7 +134,6 @@ class Program
             if (string.IsNullOrEmpty(input)) continue;
 
             var resulty = consoleUI.ParseCommand(input);
-            // Temporary basic command handling - replace with full implementation
             switch (resulty.CommandType)
             {
                 case CommandType.Quit:
@@ -204,7 +204,7 @@ class Program
         cancellationTokenSource!.Cancel();
 
         tcpServer?.Stop();
-        tcpClientHandler.Disconnect(peery.ToString());        //not implemented in file, is this smth we need still?
+        tcpClientHandler.DisconnectAll();        
         messageQueue?.CompleteAdding();
 
 
@@ -235,21 +235,23 @@ class Program
 
     private static void ProcessIncomingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){
-            var msg = messageQueue!.DequeueIncoming();
+        while (!cancellationTokenSource!.Token.IsCancellationRequested){ //checks that it's not cancelled
+            var msg = messageQueue!.DequeueIncoming(); //deque
             if (msg != null)
                 {
                     Console.WriteLine($"[{msg.Id}] {msg.Content}");
+                    //grabs msgs from peers, deques from the incoming queu and displays it
                 }
             }
     }
-    private static async void SendOutgoingMessages()
+    private static async Task SendOutgoingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){ 
-            var msg = messageQueue!.DequeueOutgoing();
+        while (!cancellationTokenSource!.Token.IsCancellationRequested){  //not cancelled
+            var msg = messageQueue!.DequeueOutgoing(); //deque
             if (msg != null && tcpClientHandler != null)
             {
                 await tcpClientHandler.BroadcastAsync(msg.Content ?? "");
+                //sends msg, deques and broadcasts
             }
         }
     }
@@ -257,6 +259,7 @@ class Program
     private static void HandlePeerConnected(Peer peer)
     {
         Console.WriteLine($"Connected to {peer.Id} *Transformer noises*");
+        //just happens when a new peer is connected
     }
 
     private static void HandleMessageRecived(Peer peer, Message message)
