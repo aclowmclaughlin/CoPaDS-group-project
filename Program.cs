@@ -12,6 +12,7 @@ using SecureMessenger.Network;
 using SecureMessenger.Security;
 using SecureMessenger.UI;
 
+
 namespace SecureMessenger;
 
 /// <summary>
@@ -62,6 +63,8 @@ class Program
      private static ConsoleUI? consoleUI;
      private static CancellationTokenSource? cancellationTokenSource;
 
+     //private static MessageHistory? messageHistory;
+
     public static int peery;
 
     static async Task Main(string[] args)
@@ -80,6 +83,7 @@ class Program
         consoleUI = new ConsoleUI();    // creates a console and put in the message guy
         tcpServer = new TcpServer();                  // TCP Server 
         tcpClientHandler = new TcpClientHandler();           //TCP client handler
+        //messageHistory = new MessageHistory();
 
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
         // 2. TcpServer.OnMessageReceived - handle received messages
@@ -134,25 +138,51 @@ class Program
             {
                 case CommandType.Quit:
                     running = false;
+                    Console.WriteLine("Quitting program ;)");
                     break;
 
                 case CommandType.Connect:
-                    peery = int.Parse(resulty.Args[1]);
-                    tcpClientHandler.ConnectAsync(resulty.Args[0], int.Parse(resulty.Args[1]));
+                    if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[1], out int port))
+                    {
+                        peery = port;
+                        await tcpClientHandler.ConnectAsync(resulty.Args[0], port);
+                        Console.WriteLine("Connecting " + peery);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid arguments for /connect. Usage: /connect <ip> <port>");
+                    }
                     break;
 
                 case CommandType.Listen:
-                    tcpServer.Start(int.Parse(resulty.Args[0]));
+                    if (resulty.Args != null && resulty.Args.Length >= 1 && int.TryParse(resulty.Args[0], out int listenPort))
+                    {
+                        Console.WriteLine("Starting TCP Server");
+                        tcpServer.Start(listenPort);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid arguments for /listen. Usage: /listen <port>");
+                    }
                     break;
 
-                case CommandType.ListPeers: //these two have no info on them, I cannot find any other ref to these names
+                case CommandType.ListPeers:
+                    Console.WriteLine("List peers not implemented yet");
+                    break;
                 case CommandType.History:
+                    Console.WriteLine("History isn't implemented yet");
+                    break;
                 case CommandType.Help:
                     consoleUI.ShowHelp();
                     break;
-
+                case CommandType.Exit:
+                    break;
+                    
                 case CommandType.Unknown:
-                    Console.WriteLine("Command does not exist. ");
+                    messageQueue!.EnqueueOutgoing(
+                        new Message
+                        {Content = input});
+                    
                     break;
 
                 default:
@@ -207,29 +237,26 @@ class Program
     {
         while (!cancellationTokenSource!.Token.IsCancellationRequested){
             var msg = messageQueue!.DequeueIncoming();
-
             if (msg != null)
                 {
                     Console.WriteLine($"[{msg.Id}] {msg.Content}");
                 }
             }
     }
-
-    private static void SendOutgoingMessages()
+    private static async void SendOutgoingMessages()
     {
         while (!cancellationTokenSource!.Token.IsCancellationRequested){ 
             var msg = messageQueue!.DequeueOutgoing();
-
-            if (msg != null)
+            if (msg != null && tcpClientHandler != null)
             {
-                //send her out
+                await tcpClientHandler.BroadcastAsync(msg.Content ?? "");
             }
         }
     }
 
     private static void HandlePeerConnected(Peer peer)
     {
-        Console.WriteLine("Connected to" + peer.Id + "*Trasformer noises*");
+        Console.WriteLine($"Connected to {peer.Id} *Transformer noises*");
     }
 
     private static void HandleMessageRecived(Peer peer, Message message)
