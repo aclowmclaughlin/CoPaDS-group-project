@@ -250,7 +250,7 @@ class Program
             var msg = messageQueue!.DequeueOutgoing(); //deque
             if (msg != null && tcpClientHandler != null)
             {
-                await tcpClientHandler.BroadcastAsync(msg.Content+"\n" ?? "");
+                await tcpClientHandler.BroadcastAsync("["DateTime.Now.ToString("HH:mm") + "] :" +(msg.Content+"\n" ?? ""));
                 //sends msg, deques and broadcasts
             }
         }
