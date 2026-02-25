@@ -262,7 +262,7 @@ class Program
         //just happens when a new peer is connected
     }
 
-    private static void HandleMessageRecived(Peer peer, Message message)
+    private static void HandleMessageReceived(Peer peer, Message message)
     {
         messageQueue!.EnqueueIncoming(message); //oh yeah enque that message
     }
