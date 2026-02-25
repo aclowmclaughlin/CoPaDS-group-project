@@ -2,10 +2,17 @@
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
+using System.Diagnostics;
+using System.Globalization;
+using System.Net.Quic;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using Microsoft.VisualBasic;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.Security;
 using SecureMessenger.UI;
+
 
 namespace SecureMessenger;
 
@@ -50,36 +57,60 @@ namespace SecureMessenger;
 /// </summary>
 class Program
 {
-    // TODO: Declare your components as fields if needed for access across methods
     // Examples:
-    // private static MessageQueue? _messageQueue;
-    // private static TcpServer? _tcpServer;
-    // private static TcpClientHandler? _tcpClientHandler;
-    // private static ConsoleUI? _consoleUI;
-    // private static CancellationTokenSource? _cancellationTokenSource;
+
+    // creates objects for all the items used below
+     private static MessageQueue? messageQueue;
+     private static TcpServer? tcpServer;
+     private static TcpClientHandler? tcpClientHandler;
+     private static ConsoleUI? consoleUI;
+     private static CancellationTokenSource? cancellationTokenSource;
+
+     //private static MessageHistory? messageHistory;   <--not implemented, will use later 
+
+    public static int peery;
 
     static async Task Main(string[] args)
     {
         Console.WriteLine("Secure Distributed Messenger");
         Console.WriteLine("============================");
 
-        // TODO: Initialize components
-        // 1. Create CancellationTokenSource for shutdown signaling
-        // 2. Create MessageQueue for thread communication
-        // 3. Create ConsoleUI for user interface
-        // 4. Create TcpServer for incoming connections
-        // 5. Create TcpClientHandler for outgoing connections
+        // 1. Create CancellationTokenSource for shutdown signaling     X
+        // 2. Create MessageQueue for thread communication              X
+        // 3. Create ConsoleUI for user interface                       X
+        // 4. Create TcpServer for incoming connections                 X
+        // 5. Create TcpClientHandler for outgoing connections          X
 
-        // TODO: Subscribe to events
+        cancellationTokenSource = new CancellationTokenSource();
+        messageQueue = new MessageQueue();         //creates message queue guy
+        consoleUI = new ConsoleUI();    // creates a console and put in the message guy
+        tcpServer = new TcpServer();                  // TCP Server 
+        tcpClientHandler = new TcpClientHandler();           //TCP client handler
+        //messageHistory = new MessageHistory();
+
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
         // 2. TcpServer.OnMessageReceived - handle received messages
         // 3. TcpServer.OnPeerDisconnected - handle disconnections
         // 4. TcpClientHandler events (same pattern)
 
+        tcpServer.OnPeerConnected += HandlePeerConnected;
+        tcpServer.OnMessageReceived += HandleMessageReceived;
+        tcpServer.OnPeerDisconnected += peer =>
+            Console.WriteLine("Disconnected peer " + peer.Id);
+        
+        tcpClientHandler.OnConnected+= HandlePeerConnected;
+        tcpClientHandler.OnMessageReceived+= HandleMessageReceived;
+        tcpClientHandler.OnDisconnected += peer =>
+            Console.WriteLine("disconnected ;)");
+
+
         // TODO: Start background threads
         // 1. Start a thread/task for processing incoming messages
         // 2. Start a thread/task for sending outgoing messages
         // Note: TcpServer.Start() will create its own listen thread
+
+        _ = Task.Run(ProcessIncomingMessages);
+        _ = Task.Run(SendOutgoingMessages);
 
         Console.WriteLine("Type /help for available commands");
         Console.WriteLine();
@@ -89,32 +120,77 @@ class Program
         while (running)
         {
             // TODO: Implement the main input loop
-            // 1. Read a line from the console
-            // 2. Skip empty input
-            // 3. Parse the input using ConsoleUI.ParseCommand()
-            // 4. Handle the command based on CommandType:
-            //    - Connect: Call TcpClientHandler.ConnectAsync()
-            //    - Listen: Call TcpServer.Start()
+            // 1. Read a line from the console                      X
+            // 2. Skip empty input                                  X
+            // 3. Parse the input using ConsoleUI.ParseCommand()    X
+            // 4. Handle the command based on CommandType:          X
+            //    - Connect: Call TcpClientHandler.ConnectAsync()   X
+            //    - Listen: Call TcpServer.Start()                  X
             //    - ListPeers: Display connected peers
             //    - History: Show message history
-            //    - Quit: Set running = false
+            //    - Quit: Set running = false                       X
             //    - Not a command: Send as a message to peers
 
             var input = Console.ReadLine();
             if (string.IsNullOrEmpty(input)) continue;
 
-            // Temporary basic command handling - replace with full implementation
-            switch (input.ToLower())
+            var resulty = consoleUI.ParseCommand(input);
+            switch (resulty.CommandType)
             {
-                case "/quit":
-                case "/exit":
+                case CommandType.Quit:
                     running = false;
+                    Console.WriteLine("Quitting program ;)");
                     break;
-                case "/help":
-                    ShowHelp();
+
+                case CommandType.Connect:
+                    if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[2], out int port))
+                    {
+                        peery = port;
+                        await tcpClientHandler.ConnectAsync(resulty.Args[1], port);
+                        Console.WriteLine("Connecting " + peery);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid arguments for /connect. Usage: /connect <ip> <port>");
+                    }
                     break;
+
+                case CommandType.Listen:
+                    if (resulty.Args != null && resulty.Args.Length >= 1 && int.TryParse(resulty.Args[1], out int listenPort))
+                    {
+                        Console.WriteLine("Starting TCP Server");
+                        tcpServer.Start(listenPort);
+                    }
+                    else
+                    {
+                        Console.WriteLine("Invalid arguments for /listen. Usage: /listen <port>");
+                    }
+                    break;
+
+                case CommandType.ListPeers:
+                    Console.WriteLine("List peers not implemented yet");
+                    break;
+                case CommandType.History:
+                    Console.WriteLine("History isn't implemented yet");
+                    break;
+                case CommandType.Help:
+                    consoleUI.ShowHelp();
+                    break;
+                case CommandType.Exit:
+                    break;
+                    
+                case CommandType.Unknown:
+                    messageQueue!.EnqueueOutgoing(
+                        new Message
+                        {Content = input});
+                    
+                    break;
+
                 default:
-                    Console.WriteLine("Command not yet implemented. See TODO comments.");
+                    messageQueue!.EnqueueOutgoing(
+                        new Message
+                        {Content = input});
+                    
                     break;
             }
         }
@@ -125,6 +201,13 @@ class Program
         // 3. Disconnect all clients
         // 4. Complete the MessageQueue
         // 5. Wait for background threads to finish
+
+        cancellationTokenSource!.Cancel();
+
+        tcpServer?.Stop();
+        tcpClientHandler.DisconnectAll();        
+        messageQueue?.CompleteAdding();
+
 
         Console.WriteLine("Goodbye!");
     }
@@ -150,4 +233,39 @@ class Program
     // - SendOutgoingMessages() - background task to send queued messages
     // - HandlePeerConnected(Peer peer) - event handler for new connections
     // - HandleMessageReceived(Peer peer, Message message) - event handler for messages
+
+    private static void ProcessIncomingMessages()
+    {
+        while (!cancellationTokenSource!.Token.IsCancellationRequested){ //checks that it's not cancelled
+            var msg = messageQueue!.DequeueIncoming(); //deque
+            if (msg != null)
+                {
+                    Console.WriteLine(msg.ToString());
+                    //grabs msgs from peers, deques from the incoming queu and displays it
+                }
+            }
+    }
+    private static async Task SendOutgoingMessages()
+    {
+        while (!cancellationTokenSource!.Token.IsCancellationRequested){  //not cancelled
+            var msg = messageQueue!.DequeueOutgoing(); //deque
+            if (msg != null && tcpClientHandler != null)
+            {
+                await tcpClientHandler.BroadcastAsync($"{msg.Content ?? ""}\n");
+                
+                //sends msg, deques and broadcasts
+            }
+        }
+    }
+
+    private static void HandlePeerConnected(Peer peer)
+    {
+        Console.WriteLine($"Connected to {peer.Id} *Transformer noises*");
+        //just happens when a new peer is connected
+    }
+
+    private static void HandleMessageReceived(Peer peer, Message message)
+    {
+        messageQueue!.EnqueueIncoming(message); //oh yeah enque that message
+    }
 }
