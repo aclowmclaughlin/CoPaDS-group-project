@@ -93,12 +93,12 @@ class Program
         // 4. TcpClientHandler events (same pattern)
 
         tcpServer.OnPeerConnected += HandlePeerConnected;
-        tcpServer.OnMessageReceived += HandleMessageRecived;
+        tcpServer.OnMessageReceived += HandleMessageReceived;
         tcpServer.OnPeerDisconnected += peer =>
-            Console.WriteLine("Disconnected peer " + peer.ID);
+            Console.WriteLine("Disconnected peer " + peer.Id);
         
         tcpClientHandler.OnConnected+= HandlePeerConnected;
-        tcpClientHandler.OnMessageReceived+= HandleMessageRecived;
+        tcpClientHandler.OnMessageReceived+= HandleMessageReceived;
         tcpClientHandler.OnDisconnected += peer =>
             Console.WriteLine("disconnected ;)");
 
