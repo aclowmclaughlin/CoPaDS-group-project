@@ -142,10 +142,10 @@ class Program
                     break;
 
                 case CommandType.Connect:
-                    if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[1], out int port))
+                    if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[2], out int port))
                     {
                         peery = port;
-                        await tcpClientHandler.ConnectAsync(resulty.Args[0], port);
+                        await tcpClientHandler.ConnectAsync(resulty.Args[1], port);
                         Console.WriteLine("Connecting " + peery);
                     }
                     else
@@ -155,7 +155,7 @@ class Program
                     break;
 
                 case CommandType.Listen:
-                    if (resulty.Args != null && resulty.Args.Length >= 1 && int.TryParse(resulty.Args[0], out int listenPort))
+                    if (resulty.Args != null && resulty.Args.Length >= 1 && int.TryParse(resulty.Args[1], out int listenPort))
                     {
                         Console.WriteLine("Starting TCP Server");
                         tcpServer.Start(listenPort);
@@ -250,7 +250,7 @@ class Program
             var msg = messageQueue!.DequeueOutgoing(); //deque
             if (msg != null && tcpClientHandler != null)
             {
-                await tcpClientHandler.BroadcastAsync(msg.Content ?? "");
+                await tcpClientHandler.BroadcastAsync(msg.Content+"\n" ?? "");
                 //sends msg, deques and broadcasts
             }
         }
