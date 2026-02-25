@@ -6,6 +6,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.Net.Quic;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using Microsoft.VisualBasic;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
@@ -239,7 +240,7 @@ class Program
             var msg = messageQueue!.DequeueIncoming(); //deque
             if (msg != null)
                 {
-                    Console.WriteLine($"[{msg.Id}] {msg.Content}");
+                    Console.WriteLine(msg.ToString());
                     //grabs msgs from peers, deques from the incoming queu and displays it
                 }
             }
@@ -250,7 +251,8 @@ class Program
             var msg = messageQueue!.DequeueOutgoing(); //deque
             if (msg != null && tcpClientHandler != null)
             {
-                await tcpClientHandler.BroadcastAsync("["DateTime.Now.ToString("HH:mm") + "] :" +(msg.Content+"\n" ?? ""));
+                await tcpClientHandler.BroadcastAsync($"{msg.Content ?? ""}\n");
+                
                 //sends msg, deques and broadcasts
             }
         }
