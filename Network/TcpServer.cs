@@ -117,7 +117,7 @@ public class TcpServer
         OnPeerConnected?.Invoke(peer);
 
         // Create and start a new Thread running ReceiveLoop for this peer
-        var receiveThread = new Thread(() => ReceiveLoop(peer));
+        var receiveThread = new Thread(async () => await ReceiveLoop(peer));
         receiveThread.Start();
     }
 

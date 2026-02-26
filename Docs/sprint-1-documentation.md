@@ -53,12 +53,17 @@ dotnet run
 ## Architecture Overview
 
 ### Threading Model
-[Describe your threading approach - which threads exist and what each does]
 
-- **Main Thread:** [Purpose]
-- **Receive Thread:** [Purpose]
-- **Send Thread:** [Purpose]
-- [Additional threads...]
+- **Main Thread:** Accepts user commands from the terminal and adds them to the appropriate queues.
+- **Server Thread:** Listens for incoming connections to the server and spawns
+more threads to handle each peer that connects to the server.
+- **TCPClientHandler Tasks:** Each time the user connects to a server, the TCPClientHandler
+spawns a Task that receives any messages sent to the server and calls any callback functions
+registered with the server.
+- **Client and Server Message Queue Tasks**: During the start of the main program,
+four tasks are spawned, two for the serverMessageQueue and two for the clientMessageQueue.
+The tasks handle any messages that are placed into the incoming queue or the outgoing queue
+of their respective messageQueues. Callback functions from the TCPClientHandler and TCPServevr simply put messages into the appropriate queue, and then the queue tasks direct them to the appropriate places.
 
 ### Thread-Safe Message Queue
 The message queue uses two BlockCollections, one to represent the incoming messages
