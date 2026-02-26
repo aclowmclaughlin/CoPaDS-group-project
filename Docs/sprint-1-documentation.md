@@ -61,7 +61,11 @@ dotnet run
 - [Additional threads...]
 
 ### Thread-Safe Message Queue
-[Describe your message queue implementation and synchronization approach]
+The message queue uses two BlockCollections, one to represent the incoming messages
+and the other to represent the outgoing messages. BlockingCollection is a C# 
+standard library class from the System.Collections.Concurrent namespace that 
+provides a threadsafe implementation of a collection. This is better than manually
+locking because it provides simpler, verified threadsafe code.
 
 ---
 
