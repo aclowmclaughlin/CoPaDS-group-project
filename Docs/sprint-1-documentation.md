@@ -88,7 +88,7 @@ dotnet run
 | Two instances can connect | Connection established | connection between them established | PASS |
 | Messages sent and received | Message appears on other instance | Messages display on another peer instance | PASS |
 | Disconnection handled | No crash, appropriate message | disconnection message for peer and user | PASS |
-| Thread safety under load | No race conditions |  | |
+| Thread safety under load | No race conditions | thread conditions and locking handled accurately, no race conditions present | PASS |
 
 ---
 
