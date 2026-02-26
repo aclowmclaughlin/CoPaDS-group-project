@@ -45,8 +45,11 @@ dotnet run
 |---------|-------------|---------|
 | `/connect <ip> <port>` | Connect to a peer | `/connect 192.168.1.100 5000` |
 | `/listen <port>` | Start listening for connections | `/listen 5000` |
+| `/help`| Displays valid commands | `/help` |
+| `/peers` | Lists known/discoverable peers | `/peers` |
+| `/history` | Displays message history | `/history` |
+| `/exit` | End the current session | `/exit` |
 | `/quit` | Exit the application | `/quit` |
-| | | |
 
 ---
 
@@ -82,10 +85,10 @@ dotnet run
 ### Test Cases
 | Test | Expected Result | Actual Result | Pass/Fail |
 |------|-----------------|---------------|-----------|
-| Two instances can connect | Connection established | | |
-| Messages sent and received | Message appears on other instance | | |
-| Disconnection handled | No crash, appropriate message | | |
-| Thread safety under load | No race conditions | | |
+| Two instances can connect | Connection established | connection between them established | PASS |
+| Messages sent and received | Message appears on other instance | Messages display on another peer instance | PASS |
+| Disconnection handled | No crash, appropriate message | disconnection message for peer and user | PASS |
+| Thread safety under load | No race conditions |  | |
 
 ---
 
