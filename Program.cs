@@ -4,7 +4,10 @@
 
 using System.Diagnostics;
 using System.Globalization;
-using System.Net;
+using System.Net.Quic;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using Microsoft.VisualBasic;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.Security;
@@ -57,8 +60,7 @@ class Program
     // Examples:
 
     // creates objects for all the items used below
-     private static MessageQueue? serverMessageQueue;
-     private static MessageQueue? clientMessageQueue;
+     private static MessageQueue? messageQueue;
      private static TcpServer? tcpServer;
      private static TcpClientHandler? tcpClientHandler;
      private static ConsoleUI? consoleUI;
@@ -80,8 +82,7 @@ class Program
         // 5. Create TcpClientHandler for outgoing connections          X
 
         cancellationTokenSource = new CancellationTokenSource();
-        serverMessageQueue = new MessageQueue();         //creates message queue guy
-        clientMessageQueue = new MessageQueue();
+        messageQueue = new MessageQueue();         //creates message queue guy
         consoleUI = new ConsoleUI();    // creates a console and put in the message guy
         tcpServer = new TcpServer();                  // TCP Server 
         tcpClientHandler = new TcpClientHandler();           //TCP client handler
@@ -93,12 +94,12 @@ class Program
         // 4. TcpClientHandler events (same pattern)
 
         tcpServer.OnPeerConnected += HandlePeerConnected;
-        tcpServer.OnMessageReceived += HandleServerMessageReceived;
+        tcpServer.OnMessageReceived += HandleMessageReceived;
         tcpServer.OnPeerDisconnected += peer =>
             Console.WriteLine("Disconnected peer " + peer.Id);
         
         tcpClientHandler.OnConnected+= HandlePeerConnected;
-        tcpClientHandler.OnMessageReceived+= HandleClientMessageReceived;
+        tcpClientHandler.OnMessageReceived+= HandleMessageReceived;
         tcpClientHandler.OnDisconnected += peer =>
             Console.WriteLine("disconnected ;)");
 
@@ -107,13 +108,9 @@ class Program
         // 1. Start a thread/task for processing incoming messages
         // 2. Start a thread/task for sending outgoing messages
         // Note: TcpServer.Start() will create its own listen thread
-        List<Task> tasklist = new List<Task>();
-        
-        var pcim = Task.Run(ProcessClientIncomingMessages);
-        var scom = Task.Run(SendClientOutgoingMessages);
-        var psim = Task.Run(ProcessServerIncomingMessages);
-        var ssom = Task.Run(SendServerOutgoingMessages);
 
+        _ = Task.Run(ProcessIncomingMessages);
+        _ = Task.Run(SendOutgoingMessages);
 
         Console.WriteLine("Type /help for available commands");
         Console.WriteLine();
@@ -183,14 +180,14 @@ class Program
                     break;
                     
                 case CommandType.Unknown:
-                    clientMessageQueue!.EnqueueOutgoing(
+                    messageQueue!.EnqueueOutgoing(
                         new Message
-                        {Content = input, Sender = Dns.GetHostName()});
+                        {Content = input});
                     
                     break;
 
                 default:
-                    clientMessageQueue!.EnqueueOutgoing(
+                    messageQueue!.EnqueueOutgoing(
                         new Message
                         {Content = input});
                     
@@ -209,11 +206,25 @@ class Program
 
         tcpServer?.Stop();
         tcpClientHandler.DisconnectAll();        
-        clientMessageQueue?.CompleteAdding();
-        serverMessageQueue?.CompleteAdding();
+        messageQueue?.CompleteAdding();
 
-        Task.WaitAll(tasklist);
+
         Console.WriteLine("Goodbye!");
+    }
+
+    /// <summary>
+    /// Display help information.
+    /// This is a temporary implementation - integrate with ConsoleUI.ShowHelp()
+    /// </summary>
+    private static void ShowHelp()
+    {
+        Console.WriteLine("\nAvailable Commands:");
+        Console.WriteLine("  /connect <ip> <port>  - Connect to a peer");
+        Console.WriteLine("  /listen <port>        - Start listening for connections");
+        Console.WriteLine("  /peers                - List connected peers");
+        Console.WriteLine("  /history              - View message history");
+        Console.WriteLine("  /quit                 - Exit the application");
+        Console.WriteLine();
     }
 
     // TODO: Add helper methods as needed
@@ -223,53 +234,32 @@ class Program
     // - HandlePeerConnected(Peer peer) - event handler for new connections
     // - HandleMessageReceived(Peer peer, Message message) - event handler for messages
 
-    private static async Task ProcessServerIncomingMessages()
+    private static void ProcessIncomingMessages()
     {
         while (!cancellationTokenSource!.Token.IsCancellationRequested){ //checks that it's not cancelled
-            var msg = serverMessageQueue!.DequeueIncoming(); //deque
+            var msg = messageQueue!.DequeueIncoming(); //deque
             if (msg != null)
                 {
-                    Console.WriteLine($"Server Received Message: {msg.ToString()}");
-                    // consoleUI?.DisplayMessage(msg);
+                    Console.WriteLine(msg.ToString());
+                    //grabs msgs from peers, deques from the incoming queu and displays it
                 }
             }
     }
-
-    private static async Task SendServerOutgoingMessages()
+    private static async Task SendOutgoingMessages()
     {
         while (!cancellationTokenSource!.Token.IsCancellationRequested){  //not cancelled
-            var msg = serverMessageQueue!.DequeueOutgoing(); //deque
-            if (msg != null && tcpServer != null)
-            {
-                await tcpServer.BroadcastAsync(msg);
-                //sends msg, deques and broadcasts
-            }
-        }
-    }
-
-    private static async Task ProcessClientIncomingMessages()
-    {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){ //checks that it's not cancelled
-            var msg = clientMessageQueue!.DequeueIncoming(); //deque
-            if (msg != null)
-                {
-                    consoleUI?.DisplayMessage(msg);
-                }
-            }
-    }
-
-    private static async Task SendClientOutgoingMessages()
-    {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){  //not cancelled
-            var msg = clientMessageQueue!.DequeueOutgoing(); //deque
+            var msg = messageQueue!.DequeueOutgoing(); //deque
             if (msg != null && tcpClientHandler != null)
             {
+                msg.Content ??= "";
+                msg.Content += "\n";
+
                 await tcpClientHandler.BroadcastAsync(msg);
+                
                 //sends msg, deques and broadcasts
             }
         }
     }
-
 
     private static void HandlePeerConnected(Peer peer)
     {
@@ -277,14 +267,8 @@ class Program
         //just happens when a new peer is connected
     }
 
-    private static void HandleServerMessageReceived(Peer peer, Message message)
+    private static void HandleMessageReceived(Peer peer, Message message)
     {
-        serverMessageQueue!.EnqueueIncoming(message);
-        serverMessageQueue!.EnqueueOutgoing(message);
-    }
-
-    private static void HandleClientMessageReceived(Peer peer, Message message)
-    {
-        clientMessageQueue!.EnqueueIncoming(message);
+        messageQueue!.EnqueueIncoming(message); //oh yeah enque that message
     }
 }
