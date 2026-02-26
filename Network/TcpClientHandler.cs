@@ -33,6 +33,10 @@ public class TcpClientHandler
         try
         {
             var client = new TcpClient();
+
+            if(host == "localhost") // Convert localhost string to IP number
+                host = "127.0.0.1";
+
             await client.ConnectAsync(host, port);
             
             // Core\Peer.cs
