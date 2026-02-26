@@ -171,6 +171,28 @@ public class TcpServer
     }
 
     /// <summary>
+    /// Broadcast a message to all connected peers.
+    /// </summary>
+    public async Task BroadcastAsync(Message msg)
+    {
+        List<Peer> allPeers;
+        lock (_connectedPeers)
+        {
+            allPeers = _connectedPeers;
+        }
+
+        foreach (Peer peer in allPeers)
+        {
+            StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
+            string serialized_msg = JsonSerializer.Serialize(msg);
+            string total_msg = serialized_msg.Length.ToString() + '\n'+ serialized_msg;
+            await stream.WriteAsync(total_msg); // this also needs to be await, but gives "Cannot await 'void'" error
+            await stream.FlushAsync();
+        }
+    }
+
+
+    /// <summary>
     /// Clean up a disconnected peer.
     /// </summary>
     private void DisconnectPeer(Peer peer)
