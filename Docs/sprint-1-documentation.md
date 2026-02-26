@@ -9,19 +9,18 @@
 - Nicholas Merante - TCPServer
 - Sophie Duquette - Program
 
-**Date:** 02/28
+**Date:** 02/27
 
 ---
 
 ## Build Instructions
 
 ### Prerequisites
-- [List required software, e.g., .NET SDK version]
-- [Any other dependencies]
+- .NET SDK version
 
 ### Building the Project
 ```
-[Commands to build the project]
+dotnet build
 ```
 
 ---
@@ -30,7 +29,7 @@
 
 ### Starting the Application
 ```
-[Commands to run the application]
+dotnet run 
 ```
 
 ### Command Line Arguments (if any)
@@ -68,12 +67,12 @@
 
 ## Features Implemented
 
-- [ ] Multi-threaded architecture
+- [x] Multi-threaded architecture - Sophie
 - [x] Thread-safe message queue - Rue
-- [x] TCP server (listen for connections)
+- [x] TCP server (listen for connections) -Nick
 - [x] TCP client (connect to peers) - Devlin
-- [ ] Send/receive text messages
-- [ ] Graceful disconnection handling
+- [x] Send/receive text messages - Team
+- [x] Graceful disconnection handling - Sophie
 - [x] Console UI with commands - Rue
 
 ---
