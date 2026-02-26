@@ -7,6 +7,7 @@ using System.Data;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using SecureMessenger.Core;
 
 namespace SecureMessenger.Network;
@@ -69,16 +70,28 @@ public class TcpClientHandler
         {
             StreamReader? stream = new StreamReader(peer.Stream); // possible null, fix later
             while (peer.IsConnected) {
-                var line = await stream.ReadLineAsync(); // need to wait until input
-                if (line == null) break;
+                var length_str = await stream.ReadLineAsync(); // need to wait until input
+                if (length_str == null) break;
 
-                // core/message.cs
-                var message = new Message
+                int length = int.Parse(length_str);
+                int chars_read = 0;
+                char[] serialized_msg = new char[length];
+                while(chars_read < length)
                 {
-                    Sender = peer.Name,
-                    Content = line,
-                    Timestamp = DateTime.UtcNow
-                };
+                    int new_chars = await stream.ReadAsync(serialized_msg, chars_read, length-chars_read);
+                    if (new_chars == 0)
+                    {
+                        // the stream has been closed ;-;
+                        break;
+                    }
+                    chars_read += new_chars;
+                }
+                Message? message = JsonSerializer.Deserialize<Message>(serialized_msg);
+                if (message == null)
+                {
+                    // deserialization failed, cry or smthn.
+                    Console.WriteLine("Received Message but couldn't deserialize ;-;");
+                }
 
                 OnMessageReceived?.Invoke(peer, message);
             }
@@ -98,8 +111,9 @@ public class TcpClientHandler
     /// <summary>
     /// Send a message to a specific peer.
     /// </summary>
-    public async Task SendAsync(string peerId, string message)
-    {  
+    public async Task SendAsync(string peerId, Message msg)
+    {
+
         Peer? peer;
         bool found = false;
         lock (_lock)
@@ -111,7 +125,9 @@ public class TcpClientHandler
         if (found && peer?.Stream != null && peer.IsConnected == true)
         {
             StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
-            stream.Write(message); // this also needs to be await, but gives "Cannot await 'void'" error
+            string serialized_msg = JsonSerializer.Serialize(msg);
+            string total_msg = serialized_msg.Length.ToString() + '\n'+ serialized_msg;
+            await stream.WriteAsync(total_msg); // this also needs to be await, but gives "Cannot await 'void'" error
             await stream.FlushAsync();
         }
     }
@@ -119,7 +135,7 @@ public class TcpClientHandler
     /// <summary>
     /// Broadcast a message to all connected peers.
     /// </summary>
-    public async Task BroadcastAsync(string message)
+    public async Task BroadcastAsync(Message msg)
     {
         List<Peer> allPeers;
         lock (_lock)
@@ -129,7 +145,7 @@ public class TcpClientHandler
 
         foreach (Peer p in allPeers)
         {
-            await SendAsync(p.Id, message);
+            await SendAsync(p.Id, msg);
         }
         
     }

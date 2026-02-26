@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Net.Sockets;
+using System.Text.Json;
 using SecureMessenger.Core;
 
 namespace SecureMessenger.Network;
@@ -123,7 +124,7 @@ public class TcpServer
     /// <summary>
     /// Receive loop for a specific peer - reads messages until disconnection.
     /// </summary>
-    private void ReceiveLoop(Peer peer)
+    private async Task ReceiveLoop(Peer peer)
     {
         try
         {
@@ -133,21 +134,29 @@ public class TcpServer
             // Loop while peer is connected and cancellation not requested
             while(peer.IsConnected && !_cancellationTokenSource!.Token.IsCancellationRequested)
             {
-                // Read a line from the stream (ReadLine blocks until data available)
-                var line = reader.ReadLine();
+                var length_str = await reader.ReadLineAsync(); // need to wait until input
+                if (length_str == null) break;
 
-                // If line is null, the connection was closed - break the loop
-                if(line == null)
-                    break;
-                
-                // Create a Message object with the received content
-                var message = new Message {
-                    Sender = peer.Name,
-                    Content = line,
-                    Timestamp = DateTime.Now
-                };
+                int length = int.Parse(length_str);
+                int chars_read = 0;
+                char[] serialized_msg = new char[length];
+                while(chars_read < length)
+                {
+                    int new_chars = await reader.ReadAsync(serialized_msg, chars_read, length-chars_read);
+                    if (new_chars == 0)
+                    {
+                        // the stream has been closed ;-;
+                        break;
+                    }
+                    chars_read += new_chars;
+                }
+                Message? message = JsonSerializer.Deserialize<Message>(serialized_msg);
+                if (message == null)
+                {
+                    // deserialization failed, cry or smthn.
+                    Console.WriteLine("Received Message but couldn't deserialize ;-;");
+                }
 
-                // Invoke OnMessageReceived event with the peer and message
                 OnMessageReceived?.Invoke(peer, message);
             }
         }
