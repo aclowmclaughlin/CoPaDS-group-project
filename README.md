@@ -69,6 +69,8 @@ Hello, world!
 Goodbye!
 ```
 
+When running multiple instances on the same device, use `/listen <port>` on one, and then `/connect <ip> <port>` on both
+
 ## Project Structure
 
 ```
