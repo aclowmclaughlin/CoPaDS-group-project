@@ -66,7 +66,7 @@ class Program
 
      //private static MessageHistory? messageHistory;   <--not implemented, will use later 
 
-    public static int peery;
+    public static int peery = 0;
 
     static async Task Main(string[] args)
     {
@@ -132,7 +132,9 @@ class Program
             //    - ListPeers: Display connected peers
             //    - History: Show message history
             //    - Quit: Set running = false                       X
+            //    - Exit: Disconnect peers
             //    - Not a command: Send as a message to peers
+
 
             var input = Console.ReadLine();
             if (string.IsNullOrEmpty(input)) continue;
@@ -149,8 +151,16 @@ class Program
                     if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[2], out int port))
                     {
                         peery = port;
-                        await tcpClientHandler.ConnectAsync(resulty.Args[1], port);
-                        Console.WriteLine("Connecting " + peery);
+
+                        bool connected = await tcpClientHandler.ConnectAsync(resulty.Args[1], port);
+                        if (connected)
+                        {
+                            Console.WriteLine($"Connected to peer {peery}");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Couldn't connect to peer {peery}" + " :( ");  //This now checks if the port can happen and if not exits nicely
+                        }
                     }
                     else
                     {
@@ -180,13 +190,22 @@ class Program
                     consoleUI.ShowHelp();
                     break;
                 case CommandType.Exit:
+                    if (peery != 0)
+                    {
+                        Console.WriteLine("Disconnecting everything" );
+                        tcpClientHandler.DisconnectAll();
+                        // this nukes all connections
+                    }
+                    else
+                    {
+                        Console.WriteLine("no peer to disconnect silly");
+                    }
                     break;
                     
                 case CommandType.Unknown:
                     clientMessageQueue!.EnqueueOutgoing(
                         new Message
                         {Content = input, Sender = Dns.GetHostName()+Environment.ProcessId.ToString()});
-                    
                     break;
 
                 default:
