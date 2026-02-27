@@ -185,14 +185,14 @@ class Program
                 case CommandType.Unknown:
                     clientMessageQueue!.EnqueueOutgoing(
                         new Message
-                        {Content = input, Sender = Dns.GetHostName()});
+                        {Content = input, Sender = Dns.GetHostName()+Environment.ProcessId.ToString()});
                     
                     break;
 
                 default:
                     clientMessageQueue!.EnqueueOutgoing(
                         new Message
-                        {Content = input});
+                        {Content = input, Sender = Dns.GetHostName()+Environment.ProcessId.ToString()});
                     
                     break;
             }
