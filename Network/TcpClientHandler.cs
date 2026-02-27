@@ -102,10 +102,14 @@ public class TcpClientHandler
         
         }
 
-        catch (IOException IOE){
+        catch (IOException IOE) when (peer.IsConnected){
             Console.WriteLine($"Connection lost: {IOE.Message}");
         }
         
+        catch (ObjectDisposedException)
+        {
+            //we chillin
+        }
         finally
         {
             Disconnect(peer.Id);
