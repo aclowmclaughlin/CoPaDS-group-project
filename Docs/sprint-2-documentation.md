@@ -1,14 +1,13 @@
 # Sprint 2 Documentation
 ## Secure Distributed Messenger
 
-**Team Name:** [Your Team Name]
+**Team Name:** Team 7
 
 **Team Members:**
-- [Name 1] - [Role/Responsibilities]
-- [Name 2] - [Role/Responsibilities]
-- [Name 3] - [Role/Responsibilities]
-- [Name 4] - [Role/Responsibilities]
-- [Name 5] - [Role/Responsibilities]
+- Rue Clow-McLaughlin   - Security/AesEncryption.cs
+- Devlin Gallagher      - Security/RsaEncryption.cs
+- Nicholas Merante      - Security/MessageSigner.cs
+- Sophie Duquette       - Security/KeyExchange.cs
 
 **Date:** [Submission Date]
 
