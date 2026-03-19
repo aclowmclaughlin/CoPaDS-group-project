@@ -77,7 +77,7 @@ public class KeyExchange
         //store a new key ;)
 
         State = ConnectionState.SendingSessionKey;
-        return _rsa.EncryptSessionKey(_sessionKey, _peerPublicKey!);
+        return _rsa!.EncryptSessionKey(_sessionKey, _peerPublicKey!);
         //The exclamation point says "I promise it won't be null"
 
     }
