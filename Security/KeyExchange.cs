@@ -43,76 +43,60 @@ public class KeyExchange
 
     /// <summary>
     /// Initialize the key exchange by creating our RSA key pair.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a new RsaEncryption instance
     /// </summary>
     public KeyExchange()
     {
-        throw new NotImplementedException("Implement constructor - create RsaEncryption instance");
+        _rsa = new RsaEncryption();
+        //make the encryption!!
     }
 
     /// <summary>
     /// Get our public key to send to the peer.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Update State to SendingPublicKey
-    /// 2. Return our public key using _rsa.ExportPublicKey()
     /// </summary>
     public byte[] GetPublicKey()
     {
-        throw new NotImplementedException("Implement GetPublicKey() - see TODO in comments above");
+        State = ConnectionState.SendingPublicKey;
+        return _rsa.ExportPublicKey();
     }
 
     /// <summary>
     /// Store the peer's public key when received.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Store the peer's public key in _peerPublicKey
-    /// 2. Update State to ReceivingPublicKey
     /// </summary>
     public void ReceivePublicKey(byte[] peerPublicKey)
     {
-        throw new NotImplementedException("Implement ReceivePublicKey() - see TODO in comments above");
+        _peerPublicKey = peerPublicKey;
+        State = ConnectionState.RecivingPublicKey;
     }
 
     /// <summary>
     /// Generate a new AES session key and encrypt it for the peer (initiator side).
-    ///
-    /// TODO: Implement the following:
-    /// 1. Generate a new AES key using AesEncryption.GenerateKey()
-    /// 2. Store it in _sessionKey
-    /// 3. Update State to SendingSessionKey
-    /// 4. Encrypt the session key with peer's public key using _rsa.EncryptSessionKey()
-    /// 5. Return the encrypted session key
     /// </summary>
     public byte[] CreateEncryptedSessionKey()
     {
-        throw new NotImplementedException("Implement CreateEncryptedSessionKey() - see TODO in comments above");
+        _sessionKey = AesEncryption.GenerateKey();
+        //store a new key ;)
+
+        State = ConnectionState.SendingSessionKey();
+        return _rsa.EncryptSessionKey(_sessionKey, _peerPublicKey!)
+        //The exclamation point says "I promise it won't be null"
+
     }
 
     /// <summary>
     /// Decrypt the received session key (responder side).
-    ///
-    /// TODO: Implement the following:
-    /// 1. Decrypt the encrypted key using _rsa.DecryptSessionKey()
-    /// 2. Store the decrypted key in _sessionKey
-    /// 3. Update State to Established
     /// </summary>
     public void ReceiveEncryptedSessionKey(byte[] encryptedKey)
     {
-        throw new NotImplementedException("Implement ReceiveEncryptedSessionKey() - see TODO in comments above");
+        _sessionKey =  _rsa.DecryptSessionKey(encryptedKey);
+        State = ConnectionState.Established;
     }
 
     /// <summary>
     /// Mark the key exchange as complete (initiator side, after sending session key).
-    ///
-    /// TODO: Implement the following:
-    /// 1. Update State to Established
     /// </summary>
     public void Complete()
     {
-        throw new NotImplementedException("Implement Complete() - see TODO in comments above");
+        State = ConnectionState.Established;
     }
 
     /// <summary>
