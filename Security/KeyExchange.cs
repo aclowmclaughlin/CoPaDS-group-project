@@ -65,7 +65,7 @@ public class KeyExchange
     public void ReceivePublicKey(byte[] peerPublicKey)
     {
         _peerPublicKey = peerPublicKey;
-        State = ConnectionState.RecivingPublicKey;
+        State = ConnectionState.ReceivingPublicKey;
     }
 
     /// <summary>
@@ -76,8 +76,8 @@ public class KeyExchange
         _sessionKey = AesEncryption.GenerateKey();
         //store a new key ;)
 
-        State = ConnectionState.SendingSessionKey();
-        return _rsa.EncryptSessionKey(_sessionKey, _peerPublicKey!)
+        State = ConnectionState.SendingSessionKey;
+        return _rsa.EncryptSessionKey(_sessionKey, _peerPublicKey!);
         //The exclamation point says "I promise it won't be null"
 
     }
