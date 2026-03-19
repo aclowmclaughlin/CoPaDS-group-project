@@ -1,7 +1,9 @@
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
+using System.Data.SqlTypes;
 using System.Security.Cryptography;
+using System.Text;
 
 namespace SecureMessenger.Security;
 
@@ -20,6 +22,7 @@ namespace SecureMessenger.Security;
 public class AesEncryption
 {
     private readonly byte[] _key;
+    private static readonly int IV_LENGTH = 16;
 
     /// <summary>
     /// Create with existing key (32 bytes for AES-256)
@@ -33,64 +36,55 @@ public class AesEncryption
 
     /// <summary>
     /// Generate a new random AES-256 key.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create an Aes instance using Aes.Create()
-    /// 2. Set KeySize to 256
-    /// 3. Call GenerateKey() to create a random key
-    /// 4. Return the generated key bytes
-    ///
-    /// Hint: Use a 'using' statement for proper disposal
     /// </summary>
     public static byte[] GenerateKey()
     {
-        throw new NotImplementedException("Implement GenerateKey() - see TODO in comments above");
+        using var aes = Aes.Create();
+        aes.KeySize = 256;
+        aes.GenerateKey();
+        return aes.Key;
     }
 
     /// <summary>
     /// Encrypt plaintext message using AES-256-CBC.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create an Aes instance and configure:
-    ///    - Set Key to _key
-    ///    - Set Mode to CipherMode.CBC
-    ///    - Generate a random IV using GenerateIV()
-    /// 2. Create an encryptor using CreateEncryptor()
-    /// 3. Convert plaintext to bytes using UTF8 encoding
-    /// 4. Encrypt using TransformFinalBlock()
-    /// 5. Create result array: [IV][Ciphertext]
-    ///    - Use Buffer.BlockCopy to combine IV and ciphertext
-    /// 6. Return the combined result
-    ///
-    /// Important: The IV must be prepended to the ciphertext so the
-    /// receiver can extract it for decryption.
+    /// Returns the encrypted plaintext with the IV prepended to it.
     /// </summary>
     public byte[] Encrypt(string plaintext)
     {
-        throw new NotImplementedException("Implement Encrypt() - see TODO in comments above");
+        using var aes = Aes.Create();
+        aes.Key = _key;
+        aes.Mode = CipherMode.CBC;
+        aes.GenerateIV();
+        using var encrypter = aes.CreateEncryptor();
+        byte[] plaintext_bytes = Encoding.UTF8.GetBytes(plaintext);
+        byte[] ciphertext = encrypter.TransformFinalBlock(plaintext_bytes, 0, plaintext_bytes.Length);
+
+        byte[] result = new byte[aes.IV.Length + ciphertext.Length];
+        
+        Buffer.BlockCopy(result, 0, aes.IV, 0, aes.IV.Length);
+        Buffer.BlockCopy(result, aes.IV.Length, ciphertext, 0, ciphertext.Length);
+        return result;
     }
 
     /// <summary>
     /// Decrypt ciphertext back to plaintext.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create an Aes instance and configure:
-    ///    - Set Key to _key
-    ///    - Set Mode to CipherMode.CBC
-    /// 2. Extract the IV from the first 16 bytes of ciphertext
-    ///    - Create a 16-byte array for IV
-    ///    - Use Buffer.BlockCopy to extract it
-    ///    - Set aes.IV to the extracted IV
-    /// 3. Extract the actual ciphertext (everything after IV)
-    ///    - Create array of size (ciphertext.Length - 16)
-    ///    - Use Buffer.BlockCopy to extract it
-    /// 4. Create a decryptor using CreateDecryptor()
-    /// 5. Decrypt using TransformFinalBlock()
-    /// 6. Convert decrypted bytes to string using UTF8 encoding
-    /// 7. Return the plaintext string
     /// </summary>
     public string Decrypt(byte[] ciphertext)
     {
-        throw new NotImplementedException("Implement Decrypt() - see TODO in comments above");
+        using var aes = Aes.Create();
+        aes.Key = _key;
+        aes.Mode = CipherMode.CBC;
+        // extract IV from ciphertext
+        byte[] extracted_iv = new byte[IV_LENGTH];
+        Buffer.BlockCopy(extracted_iv, 0, ciphertext, 0, IV_LENGTH);
+        aes.IV = extracted_iv;
+        // extract ciphertext from new ciphertext
+        byte[] extracted_ciphertext = new byte[ciphertext.Length - IV_LENGTH];
+        Buffer.BlockCopy(extracted_ciphertext, 0, ciphertext, IV_LENGTH, ciphertext.Length - IV_LENGTH);
+        // create decryptor
+        var decryptor = aes.CreateDecryptor();
+        // decrypt
+        byte[] plaintext_bytes = decryptor.TransformFinalBlock(extracted_ciphertext, 0, extracted_ciphertext.Length);
+        return Encoding.UTF8.GetString(plaintext_bytes);
     }
 }
