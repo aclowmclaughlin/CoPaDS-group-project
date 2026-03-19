@@ -33,41 +33,49 @@ public class MessageSigner
 
     /// <summary>
     /// Sign data with our private key.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Use _rsa.SignData() with:
-    ///    - The data bytes to sign
-    ///    - HashAlgorithmName.SHA256
-    ///    - RSASignaturePadding.Pkcs1
-    /// 2. Return the signature bytes
     /// </summary>
     public byte[] SignData(byte[] data)
     {
-        throw new NotImplementedException("Implement SignData() - see TODO in comments above");
+        // return _rsa.SignData() with:
+        //    - The data bytes to sign
+        //    - HashAlgorithmName.SHA256
+        //    - RSASignaturePadding.Pkcs1
+        return _rsa.SignData(data, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
     }
 
     /// <summary>
     /// Verify a message signature with the sender's public key.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a new RSA instance for the sender's public key
-    /// 2. Import the sender's public key
-    /// 3. Use VerifyData() with:
-    ///    - The original data bytes
-    ///    - The signature bytes
-    ///    - HashAlgorithmName.SHA256
-    ///    - RSASignaturePadding.Pkcs1
-    /// 4. If verification fails:
-    ///    - Print a warning: "WARNING: Invalid signature detected - message may be tampered!"
-    /// 5. Handle CryptographicException:
-    ///    - Print error: "ERROR: Failed to verify signature - rejecting message"
-    ///    - Return false
-    /// 6. Return the verification result (true if valid, false if invalid)
-    ///
-    /// Security Note: Always reject messages with invalid signatures!
     /// </summary>
     public bool VerifyData(byte[] data, byte[] signature, byte[] publicKey)
     {
-        throw new NotImplementedException("Implement VerifyData() - see TODO in comments above");
+        try
+        {
+            // Create a new RSA instance for the sender's public key
+            using var peerRsa = RSA.Create();
+            
+            // Import the sender's public key
+            peerRsa.ImportRSAPublicKey(publicKey, out _);
+
+            // Use VerifyData() with:
+            //    - The original data bytes
+            //    - The signature bytes
+            //    - HashAlgorithmName.SHA256
+            //    - RSASignaturePadding.Pkcs1
+            bool isValid = peerRsa.VerifyData(data, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        
+            if(!isValid)
+            {
+                Console.WriteLine("[WARNING] Invalid signature detected; message may be tampered with");
+                throw new CryptographicException("Signature verification failed");
+            }
+
+            // Signature deemed valid, return true
+            return isValid;
+        }
+        catch(CryptographicException) // Reject messages with invalid signatures
+        {
+            Console.WriteLine("[ERROR] Failed to verify message signature; rejecting message");
+            return false;
+        }
     }
 }
