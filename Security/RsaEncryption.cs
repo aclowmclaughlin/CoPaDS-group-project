@@ -27,69 +27,44 @@ public class RsaEncryption
 
     /// <summary>
     /// Create a new RSA key pair.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a 2048-bit RSA key pair using RSA.Create(2048)
     /// </summary>
     public RsaEncryption()
     {
-        // TODO: Generate RSA key pair (2048 bits)
-        throw new NotImplementedException("Implement constructor - create RSA key pair");
+        _rsa = RSA.Create(2048);
     }
 
     /// <summary>
     /// Export our public key to send to a peer.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Use _rsa.ExportRSAPublicKey() to get the public key bytes
-    /// 2. Return the byte array
     /// </summary>
     public byte[] ExportPublicKey()
     {
-        throw new NotImplementedException("Implement ExportPublicKey() - see TODO in comments above");
+        return _rsa.ExportRSAPublicKey();
     }
 
     /// <summary>
     /// Import a peer's public key.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Use _rsa.ImportRSAPublicKey(publicKey, out _) to import the key
-    ///
-    /// Note: The 'out _' discards the bytes read count which we don't need
     /// </summary>
     public void ImportPublicKey(byte[] publicKey)
     {
-        throw new NotImplementedException("Implement ImportPublicKey() - see TODO in comments above");
+        _rsa.ImportRSAPublicKey(publicKey, out _);
     }
 
     /// <summary>
     /// Encrypt an AES session key with a peer's public key.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a new RSA instance for the peer's key using RSA.Create()
-    /// 2. Import the peer's public key into this new instance
-    /// 3. Encrypt the AES key using peerRsa.Encrypt() with OaepSHA256 padding
-    /// 4. Return the encrypted key bytes
-    ///
-    /// Important: Use RSAEncryptionPadding.OaepSHA256 for security
     /// </summary>
     public byte[] EncryptSessionKey(byte[] aesKey, byte[] peerPublicKey)
     {
-        throw new NotImplementedException("Implement EncryptSessionKey() - see TODO in comments above");
+        RSA peerRSA = RSA.Create();
+        peerRSA.ImportRSAPublicKey(peerPublicKey, out _);
+        return peerRSA.Encrypt(aesKey, RSAEncryptionPadding.OaepSHA256);
     }
 
     /// <summary>
     /// Decrypt an AES session key with our private key.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Use _rsa.Decrypt() with OaepSHA256 padding to decrypt
-    /// 2. Return the decrypted AES key bytes
-    ///
-    /// Important: Use RSAEncryptionPadding.OaepSHA256 (must match encryption)
     /// </summary>
     public byte[] DecryptSessionKey(byte[] encryptedKey)
     {
-        throw new NotImplementedException("Implement DecryptSessionKey() - see TODO in comments above");
+        return _rsa.Decrypt(encryptedKey, RSAEncryptionPadding.OaepSHA256);
     }
 
     /// <summary>
