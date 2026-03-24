@@ -101,6 +101,21 @@ public class ConsoleUI
             case "/history":
                 result.CommandType = CommandType.History;
                 break;
+            case "/rooms":
+                result.CommandType  = CommandType.ListRooms;
+                break;
+            case "/create":
+                result.CommandType = CommandType.CreateRoom;
+                break;
+            case "/leave":
+                result.CommandType = CommandType.LeaveRoom;
+                break;
+            case "/join":
+                result.CommandType = CommandType.JoinRoom;
+                break;
+            case "/msg":
+                result.CommandType = CommandType.MessageRoom;
+                break;
             case "/quit":
                 result.CommandType = CommandType.Quit;
                 break;
@@ -127,8 +142,13 @@ public enum CommandType
     Listen,
     ListPeers,
     History,
+    ListRooms,
+    CreateRoom,
+    LeaveRoom,
+    JoinRoom,
+    MessageRoom,
     Quit,
-    Exit
+    Exit,
 }
 
 /// <summary>
