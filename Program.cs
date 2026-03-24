@@ -146,7 +146,6 @@ class Program
                     running = false;
                     Console.WriteLine("Quitting program ;)");
                     break;
-
                 case CommandType.Connect:
                     if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[2], out int port))
                     {
@@ -167,7 +166,6 @@ class Program
                         Console.WriteLine("Invalid arguments for /connect. Usage: /connect <ip> <port>");
                     }
                     break;
-
                 case CommandType.Listen:
                     if (resulty.Args != null && resulty.Args.Length >= 1 && int.TryParse(resulty.Args[1], out int listenPort))
                     {
@@ -188,6 +186,71 @@ class Program
                     break;
                 case CommandType.Help:
                     consoleUI.ShowHelp();
+                    break;
+                // Room commands
+                case CommandType.CreateRoom:
+                    // make sure arguments are valid
+                    if (resulty.Args == null 
+                        || resulty.Args.Length < 2 
+                        || !resulty.Args[1].StartsWith('#'))
+                    {
+                        Console.WriteLine("Invalid arguments for /create. Usage: /create #<room>");
+                    } else
+                    {
+                        string room_name = resulty.Args[1];
+                        // create the room
+                        //TODO complete
+                    }
+                    break;
+                case CommandType.JoinRoom:
+                    if (resulty.Args == null 
+                        || resulty.Args.Length < 2 
+                        || !resulty.Args[1].StartsWith('#'))
+                    {
+                        Console.WriteLine("Invalid arguments for /join. Usage: /join #<room>");
+                        break;
+                    } else
+                    {
+                        string room_name = resulty.Args[1];
+                        // join the room
+                        //TODO complete
+                    }
+                    break;
+                case CommandType.LeaveRoom:
+                    if (resulty.Args == null 
+                        || resulty.Args.Length < 2 
+                        || !resulty.Args[1].StartsWith('#'))
+                    {
+                        Console.WriteLine("Invalid arguments for /leave. Usage: /leave #<room>");
+                        break;
+                    } else
+                    {
+                        string room_name = resulty.Args[1];
+                        // leave the room
+                        //TODO complete
+                    }
+                    break;
+                case CommandType.ListRooms:
+                    if (resulty.Args != null) {
+                        string room_name = resulty.Args[1];
+                        // list rooms
+                        //TODO complete
+                    }
+                    break;
+                case CommandType.MessageRoom:
+                    if (resulty.Args == null 
+                        || resulty.Args.Length < 3
+                        || !resulty.Args[1].StartsWith('#'))
+                    {
+                        Console.WriteLine("Invalid arguments for /msg. Usage: /msg #<room> message");
+                        break;
+                    } else
+                    {
+                        string room_name = resulty.Args[1];
+                        string message = resulty.Args[2];
+                        // message the specified room
+                        //TODO complete
+                    }
                     break;
                 case CommandType.Exit:
                     if (peery != 0)

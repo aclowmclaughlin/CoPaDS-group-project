@@ -38,6 +38,11 @@ public class ConsoleUI
         /history             - View message history
         /quit                - Exit the application
         /exit                - End current session
+        /join #<room>        - Join a room
+        /create #<room>      - Create a room with the specified room-id
+        /leave #<room>       - Leaves the room with the specified room-id
+        /rooms               - lists all rooms that are registers with the server
+        /msg #<room> message - Send a message to the specified room
     """;
     public ConsoleUI() {}
 
@@ -163,6 +168,7 @@ public class CommandResult
     public CommandType CommandType { get; set; }
 
     /// <summary>Arguments for the command (e.g., IP and port for /connect)</summary>
+    /// index 0 of Args is always the command string
     public string[]? Args { get; set; }
 
     /// <summary>The message content (for non-commands or error messages)</summary>
