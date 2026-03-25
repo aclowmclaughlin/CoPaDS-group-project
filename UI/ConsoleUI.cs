@@ -38,6 +38,11 @@ public class ConsoleUI
         /history             - View message history
         /quit                - Exit the application
         /exit                - End current session
+        /join #<room>        - Join a room
+        /create #<room>      - Create a room with the specified room-id
+        /leave #<room>       - Leaves the room with the specified room-id
+        /rooms               - lists all rooms that are registers with the server
+        /msg #<room> message - Send a message to the specified room
     """;
     public ConsoleUI() {}
 
@@ -101,6 +106,21 @@ public class ConsoleUI
             case "/history":
                 result.CommandType = CommandType.History;
                 break;
+            case "/rooms":
+                result.CommandType  = CommandType.ListRooms;
+                break;
+            case "/create":
+                result.CommandType = CommandType.CreateRoom;
+                break;
+            case "/leave":
+                result.CommandType = CommandType.LeaveRoom;
+                break;
+            case "/join":
+                result.CommandType = CommandType.JoinRoom;
+                break;
+            case "/msg":
+                result.CommandType = CommandType.MessageRoom;
+                break;
             case "/quit":
                 result.CommandType = CommandType.Quit;
                 break;
@@ -127,8 +147,13 @@ public enum CommandType
     Listen,
     ListPeers,
     History,
+    ListRooms,
+    CreateRoom,
+    LeaveRoom,
+    JoinRoom,
+    MessageRoom,
     Quit,
-    Exit
+    Exit,
 }
 
 /// <summary>
@@ -143,6 +168,7 @@ public class CommandResult
     public CommandType CommandType { get; set; }
 
     /// <summary>Arguments for the command (e.g., IP and port for /connect)</summary>
+    /// index 0 of Args is always the command string
     public string[]? Args { get; set; }
 
     /// <summary>The message content (for non-commands or error messages)</summary>
