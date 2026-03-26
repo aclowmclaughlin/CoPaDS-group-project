@@ -7,8 +7,10 @@ using System.Data;
 using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices.Swift;
 using System.Text.Json;
 using SecureMessenger.Core;
+using SecureMessenger.Security;
 
 namespace SecureMessenger.Network;
 
@@ -18,6 +20,8 @@ namespace SecureMessenger.Network;
 public class TcpClientHandler
 {
     private readonly Dictionary<string, Peer> _connections = new();
+
+    private readonly RsaEncryption rsa_encryption = new();
     private readonly object _lock = new();
 
     public event Action<Peer>? OnConnected;
@@ -48,6 +52,8 @@ public class TcpClientHandler
                 Port = port,
                 IsConnected = true
             };
+
+            await peer.Stream.WriteAsync(rsa_encryption.ExportPublicKey());
 
             lock(_lock) { _connections[peer.Id] = peer; };
 

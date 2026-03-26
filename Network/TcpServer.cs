@@ -106,6 +106,11 @@ public class TcpServer
             Port = ((IPEndPoint)client.Client.RemoteEndPoint!).Port,
             IsConnected = true
         };
+        byte[] peer_public_key = new byte[2048];
+        peer.Stream.ReadExactlyAsync(peer_public_key, 0, 2048);
+        peer.PublicKey = peer_public_key;
+
+        
 
         // Add the peer to _connectedPeers (with proper locking)
         lock(_connectedPeers)
