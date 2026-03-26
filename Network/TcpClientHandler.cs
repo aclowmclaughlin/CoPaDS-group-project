@@ -21,7 +21,7 @@ public class TcpClientHandler
 {
     private readonly Dictionary<string, Peer> _connections = new();
 
-    private readonly RsaEncryption rsa_encryption = new();
+    public readonly RsaEncryption rsa_encryption = new();
     private readonly object _lock = new();
 
     public event Action<Peer>? OnConnected;
