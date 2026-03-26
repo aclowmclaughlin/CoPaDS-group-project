@@ -384,7 +384,7 @@ class Program
         {
             try
             {
-                var msg = clientMessageQueue!.DequeueIncoming(); //dequeu
+                var msg = clientMessageQueue!.DequeueIncoming(); //dequeue
                 if (msg != null)
                 {
                     consoleUI?.DisplayMessage(msg);
@@ -418,22 +418,10 @@ class Program
             // Send differently encrypted message to each peer
             foreach(var peer in peers)
             {
-                // Ensure session already exists
-                bool hasSession;
-                lock(peerEncryptionLock)
-                {
-                    hasSession = peerAesEncryptions.ContainsKey(peer.Id);
-                }
-
-                if(!hasSession)
-                {
-                    Console.WriteLine($"No AES session established with {peer.Id}; skipping");
-                    continue;
-                }
-
-                // Encrypt using peer's session key and send message
-                Message encryptedCopy = CreateEncryptedChatMessage(peer, logicalMessage);
-                await tcpClientHandler.SendAsync(peer.Id, encryptedCopy);
+                // this will only really send to the server, but the server
+                // will forward to the appropriate client based off of
+                // the targetPeerId fieldd
+                await tcpClientHandler.SendAsync(peer.Id, logicalMessage);
             }
         }
     }
@@ -639,6 +627,7 @@ class Program
     /// </summary>
     private static void HandleEncryptedChatMessage(Peer peer, Message message, bool isServerSide)
     {
+        //TODO fix this
         if(isServerSide)
         {
             serverMessageQueue!.EnqueueIncoming(message);
