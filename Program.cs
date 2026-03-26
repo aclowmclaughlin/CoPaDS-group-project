@@ -69,7 +69,7 @@ class Program
 
      //private static MessageHistory? messageHistory;   <--not implemented, will use later 
 
-    private static readonly ConcurrentDictionary<string, AesEncryption> peerEncryption = new();
+    private static readonly ConcurrentDictionary<string, AesEncryption> peerAesEncryptions = new();
     private static readonly ConcurrentDictionary<string, byte[]> peerPublicKeys = new();
 
 
@@ -422,7 +422,7 @@ class Program
                 bool hasSession;
                 lock(peerEncryptionLock)
                 {
-                    hasSession = peerEncryption.ContainsKey(peer.Id);
+                    hasSession = peerAesEncryptions.ContainsKey(peer.Id);
                 }
 
                 if(!hasSession)
@@ -453,23 +453,32 @@ class Program
         return null;
     }
 
-    private static bool SendMessageToClient(string client_name, string message)
+    private static bool SendMessageToClient(string client_name, string message, string room)
     {
         // check if we are already connected to the client (they exist in the connection dictionary)
-        if (!peerEncryption.ContainsKey(client_name))
+        if (!peerAesEncryptions.ContainsKey(client_name))
         {
             // if we are not, connect to the client
             CreateAESConnectionWithClient(client_name);
         }
         // send the message to the specific client
-        Message message = CreateEncryptedChatMessage(client_name, message);
-        clientMessageQueue!.EnqueueOutgoing(message);
+        Message plainMessage = new Message
+        {
+            Type=MessageType.RoomChat,
+            Sender=localUserName,
+            TargetPeerID=client_name,
+            Room = room,
+            Content = message,
+        };
+
+        Message encrypedMessage = CreateEncryptedChatMessage(client_name, plainMessage);
+        clientMessageQueue!.EnqueueOutgoing(encrypedMessage);
         return true;
     }
 
     private static bool CreateAESConnectionWithClient(string client_name)
     {
-        
+        //TODO: Make this work
     }
 
     private static void HandlePeerConnected(Peer peer)
@@ -493,6 +502,7 @@ class Program
 
     private static void HandleServerMessageReceived(Peer peer, Message message)
     {
+        // TODO implement this
         switch (message.Type)
         {
             
@@ -501,6 +511,7 @@ class Program
 
     private static void HandleClientMessageReceived(Peer peer, Message message)
     {
+        //TODO fix this
         switch(message.Type) // Handle messages differently based on message type
         {
             case MessageType.PublicKey:
@@ -527,6 +538,7 @@ class Program
     /// </summary>
     private static void HandlePublicKeyMessage(Message message)
     {
+        //TODO fix this
         if(message.PublicKey == null)
             return;
 
@@ -564,7 +576,7 @@ class Program
 
         lock(peerEncryptionLock)
         {
-            peerEncryption[peer.Id] = new AesEncryption(keyExchange.SessionKey);
+            peerAesEncryptions[peer.Id] = new AesEncryption(keyExchange.SessionKey);
         }
 
         var sessionKeyMessage = new Message
@@ -586,6 +598,7 @@ class Program
     /// </summary>
     private static void HandleSessionKeyMessage(Peer peer, Message message)
     {
+        //TODO fix this
         if(message.EncryptedSessionKey == null)
             return;
 
@@ -614,7 +627,7 @@ class Program
 
         lock(peerEncryptionLock)
         {
-            peerEncryption[peer.Id] = new AesEncryption(keyExchange.SessionKey);
+            peerAesEncryptions[peer.Id] = new AesEncryption(keyExchange.SessionKey);
         }
 
         Console.WriteLine($"Session key established with {peer.Id}");
@@ -645,11 +658,11 @@ class Program
     /// </summary>
     private static Message CreateEncryptedChatMessage(string client_name, Message logicalMessage)
     {
-        AesEncryption aes;
+        AesEncryption? aes;
         KeyExchange? keyExchange;
 
         // get aes encryptor
-        peerEncryption.TryGetValue(client_name, out aes);
+        peerAesEncryptions.TryGetValue(client_name, out aes);
         // get keyexchange
         peerKeyExchanges.TryGetValue(client_name, out keyExchange);
 
@@ -666,7 +679,7 @@ class Program
         {
             Type                = MessageType.Chat,
             Sender              = logicalMessage.Sender,
-            TargetPeerID        = string.Empty,
+            TargetPeerID        = logicalMessage.TargetPeerID,
             Room                = logicalMessage.Room,
             EncryptedContent    = encryptedBytes,
             Signature           = signature,
@@ -715,7 +728,7 @@ class Program
 
         // Decrypt 
         AesEncryption aes;
-        if(!peerEncryption.TryGetValue(client_name, out aes!))
+        if(!peerAesEncryptions.TryGetValue(client_name, out aes!))
         {
             Console.WriteLine("No AES session found for peer");
             return false;
