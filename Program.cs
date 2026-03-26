@@ -2,9 +2,12 @@
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net;
+using System.Net.NetworkInformation;
+using System.Runtime.CompilerServices;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.Security;
@@ -66,11 +69,11 @@ class Program
 
      //private static MessageHistory? messageHistory;   <--not implemented, will use later 
 
-    private static readonly Dictionary<string, AesEncryption> peerEncryption = new();
-    private static readonly object peerEncryptionLock = new();
+    private static readonly ConcurrentDictionary<string, AesEncryption> peerEncryption = new();
+    private static readonly ConcurrentDictionary<string, byte[]> peerPublicKeys = new();
 
-    private static readonly Dictionary<string, KeyExchange> peerKeyExchanges = new();
-    private static readonly object peerKeyExchangeLock = new();
+
+    private static readonly ConcurrentDictionary<string, KeyExchange> peerKeyExchanges = new();
 
     private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
     
@@ -288,8 +291,7 @@ class Program
                     {
                         string room_name = resulty.Args[1];
                         string message = resulty.Args[2];
-                        // message the specified room
-                        //TODO complete
+                        var error = SendMessageToRoom(room_name, message);
                     }
                     break;
                 case CommandType.Exit:
@@ -382,7 +384,7 @@ class Program
         {
             try
             {
-                var msg = clientMessageQueue!.DequeueIncoming(); //deque
+                var msg = clientMessageQueue!.DequeueIncoming(); //dequeu
                 if (msg != null)
                 {
                     consoleUI?.DisplayMessage(msg);
@@ -437,27 +439,42 @@ class Program
     }
 
 
+    private static string? SendMessageToRoom(string room_name, string message) 
+    {
+        // request a list of clients in the room from the server
+
+        // wait for response from server (receive is going to have to put this in a certain slot)
+
+        // if there is no such room, then early return with an error message
+
+        // for each client in the room, send the message to them
+
+        // null return represents no error
+        return null;
+    }
+
+    private static bool SendMessageToClient(string client_name, string message)
+    {
+        // check if we are already connected to the client (they exist in the connection dictionary)
+        if (!peerEncryption.ContainsKey(client_name))
+        {
+            // if we are not, connect to the client
+            CreateAESConnectionWithClient(client_name);
+        }
+        // send the message to the specific client
+        Message message = CreateEncryptedChatMessage(client_name, message);
+        clientMessageQueue!.EnqueueOutgoing(message);
+        return true;
+    }
+
+    private static bool CreateAESConnectionWithClient(string client_name)
+    {
+        
+    }
+
     private static void HandlePeerConnected(Peer peer)
     {
         Console.WriteLine($"Connected to {peer.Id} *Transformer noises*");
-
-        KeyExchange keyExchange = new KeyExchange();
-
-        lock (peerKeyExchangeLock)
-        {
-            peerKeyExchanges[peer.Id] = keyExchange;
-        }
-
-        var publicKeyMessage = new Message
-        {
-            Type            = MessageType.PublicKey,
-            Sender          = localUserName,
-            TargetPeerID    = string.Empty, // TODO: peer.Id in future
-            PublicKey       = keyExchange.GetPublicKey()
-        };
-
-        // Send RSA public key to peer immediately when new connection is made        
-        _ = SendToPeerAsync(peer, publicKeyMessage);
     }
 
     private static async Task SendToPeerAsync(Peer peer, Message message)
@@ -476,52 +493,39 @@ class Program
 
     private static void HandleServerMessageReceived(Peer peer, Message message)
     {
-        HandleIncomingMessage(peer, message, isServerSide: true);
+        switch (message.Type)
+        {
+            
+        }
     }
 
     private static void HandleClientMessageReceived(Peer peer, Message message)
     {
-        HandleIncomingMessage(peer, message, isServerSide: false);
-    }
-
-    /// <summary>
-    /// Call helper method based on incoming message type to determine how to handle it
-    /// </summary>
-    private static void HandleIncomingMessage(Peer peer, Message message, bool isServerSide)
-    {
         switch(message.Type) // Handle messages differently based on message type
         {
             case MessageType.PublicKey:
-                HandlePublicKeyMessage(peer, message, generateSessionKey: !isServerSide);
+                HandlePublicKeyMessage(message);
                 break;
 
             case MessageType.SessionKey:
-                HandleSessionKeyMessage(peer, message);
+                HandleSessionKeyMessage(message);
                 break;
 
             case MessageType.Chat:
-                HandleEncryptedChatMessage(peer, message, isServerSide);
+                HandleEncryptedChatMessage(message);
                 break;
 
             default:
-                if(isServerSide)
-                {
-                    serverMessageQueue!.EnqueueIncoming(message);
-                    serverMessageQueue!.EnqueueOutgoing(message);
-                }
-                else
-                {
-                    clientMessageQueue!.EnqueueIncoming(message);
-                }
+                clientMessageQueue!.EnqueueIncoming(message);
                 break;
         }
     }
 
     /// <summary>
-    /// Processes a received public key message, stores the peer's public key, generates an AES session key if needed, 
-    /// and sends the encrypted session key back.
+    /// Processes a received public key message, stores the peer's public key, 
+    /// generates an AES session key, and sends the encrypted session key back.
     /// </summary>
-    private static void HandlePublicKeyMessage(Peer peer, Message message, bool generateSessionKey)
+    private static void HandlePublicKeyMessage(Message message)
     {
         if(message.PublicKey == null)
             return;
@@ -639,24 +643,19 @@ class Program
     /// Creates an encrypted chat message for a specific peer by encrypting the plaintext content with that peer's AES
     /// session and signing the ciphertext.
     /// </summary>
-    private static Message CreateEncryptedChatMessage(Peer peer, Message logicalMessage)
+    private static Message CreateEncryptedChatMessage(string client_name, Message logicalMessage)
     {
         AesEncryption aes;
         KeyExchange? keyExchange;
 
-        lock(peerEncryptionLock)
-        {
-            aes = peerEncryption[peer.Id];
-        }
+        // get aes encryptor
+        peerEncryption.TryGetValue(client_name, out aes);
+        // get keyexchange
+        peerKeyExchanges.TryGetValue(client_name, out keyExchange);
 
-        lock (peerKeyExchangeLock)
+        if (keyExchange == null || aes == null)
         {
-            peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
-        }
-
-        if (keyExchange == null)
-        {
-            throw new InvalidOperationException($"No key exchange state found for peer {peer.Id}");
+            throw new InvalidOperationException($"No key exchange state/aes encryption found for peer {client_name}");
         }
 
         // Encrypt, sign, and return given message using peer's AES session key
@@ -679,30 +678,35 @@ class Program
     /// Attempts to verify the signature of an encrypted message, decrypt its content, and reconstruct the original 
     /// plaintext chat message.
     /// </summary>
-    private static bool TryDecryptAndVerify(Peer peer, Message message, out Message? decryptedMessage)
+    private static bool TryDecryptAndVerify(string client_name, Message message, out Message? decryptedMessage)
     {
         decryptedMessage = null;
-
-        if(message.EncryptedContent == null || message.Signature == null || peer.PublicKey == null)
-        {
-            Console.WriteLine("Missing encrypted content, signature, or public key");
-            return false;
-        }
-
-        // Validate signature of message using peer's public key
+        
         KeyExchange? keyExchange;
-        lock (peerKeyExchangeLock)
+        peerKeyExchanges.TryGetValue(client_name, out keyExchange);
+
+        if(message.EncryptedContent == null || message.Signature == null)
         {
-            peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
+            Console.WriteLine("Missing encrypted content or signature");
+            return false;
         }
 
         if (keyExchange == null)
         {
-            Console.WriteLine($"No key exchange state found for peer {peer.Id}");
+            Console.WriteLine($"No key exchange state found for peer {client_name}");
             return false;
         }
 
-        bool valid = keyExchange.Signer.VerifyData(message.EncryptedContent, message.Signature, peer.PublicKey);
+        byte[]? peer_public_key;
+        peerPublicKeys.TryGetValue(client_name, out peer_public_key);
+
+        if (peer_public_key == null)
+        {
+            Console.WriteLine($"No Peer Public Key Found for peer {client_name}");
+            return false;
+        }
+
+        bool valid = keyExchange.Signer.VerifyData(message.EncryptedContent, message.Signature, peer_public_key!);
         if (!valid)
         {
             Console.WriteLine("Signature verification failed");
@@ -711,13 +715,10 @@ class Program
 
         // Decrypt 
         AesEncryption aes;
-        lock(peerEncryptionLock)
+        if(!peerEncryption.TryGetValue(client_name, out aes!))
         {
-            if(!peerEncryption.TryGetValue(peer.Id, out aes!))
-            {
-                Console.WriteLine("No AES session found for peer");
-                return false;
-            }
+            Console.WriteLine("No AES session found for peer");
+            return false;
         }
 
         string plaintext = aes.Decrypt(message.EncryptedContent);
