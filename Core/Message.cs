@@ -15,8 +15,11 @@ public enum MessageType
 
     // server messages
     ListPeers,
+    ListPeersReply,
     ListRooms,
+    ListRoomsReply,
     ListPeersInRoom,
+    ListPeersInRoomReply,
     LeaveRoom,
     CreateRoom,
 }
