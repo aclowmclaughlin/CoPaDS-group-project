@@ -362,7 +362,31 @@ class Program
     private static void HandlePeerConnected(Peer peer)
     {
         Console.WriteLine($"Connected to {peer.Id} *Transformer noises*");
-        //just happens when a new peer is connected
+
+        var publicKeyMessage = new Message
+        {
+            Type = MessageType.PublicKey,
+            Sender = localUserName,
+            TargetPeerID = peer.Id,
+            PublicKey = rsaEncryption.ExportPublicKey()
+        };
+
+        // Send RSA public key to peer immediately when new connection is made        
+        _ = SendToPeerAsync(peer, publicKeyMessage);
+    }
+
+    private static async Task SendToPeerAsync(Peer peer, Message message)
+    {
+        if(tcpClientHandler != null && tcpClientHandler.GetConnectedPeers().Any(p => p.Id == peer.Id))
+        {
+            await tcpClientHandler.SendAsync(peer.Id, message);
+            return;
+        }
+        
+        if (tcpServer != null)
+        {
+            await tcpServer.SendToPeerAsync(peer, message);
+        }
     }
 
     private static void HandleServerMessageReceived(Peer peer, Message message)

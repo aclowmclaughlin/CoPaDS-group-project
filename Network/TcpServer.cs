@@ -183,12 +183,26 @@ public class TcpServer
 
         foreach (Peer peer in allPeers)
         {
-            StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
-            string serialized_msg = JsonSerializer.Serialize(msg);
-            string total_msg = serialized_msg.Length.ToString() + '\n'+ serialized_msg;
-            await stream.WriteAsync(total_msg); // this also needs to be await, but gives "Cannot await 'void'" error
-            await stream.FlushAsync();
+            await SendToPeerAsync(peer, msg);
         }
+    }
+
+    /// <summary>
+    /// Send a message to specific peer
+    /// </summary>
+    public async Task SendToPeerAsync(Peer peer, Message msg)
+    {
+        if (peer.Stream == null || !peer.IsConnected)
+        {
+            return;
+        }
+
+        using var writer = new StreamWriter(peer.Stream, leaveOpen: true);
+        string serializedMessage = JsonSerializer.Serialize(msg);
+        string total_msg = serializedMessage.Length + "\n" + serializedMessage;
+
+        await writer.WriteAsync(total_msg);
+        await writer.FlushAsync();
     }
 
 

@@ -27,6 +27,9 @@ public class Message
     public string Content { get; set; } = string.Empty;
     public byte[]? EncryptedContent { get; set; }
     public byte[]? Signature { get; set; }
+
+    public byte[]? PublicKey { get; set; }
+    public byte[]? EncryptedSessionKey { get; set; }
     
     public DateTime Timestamp { get; set; } = DateTime.Now;
     public override string ToString()
