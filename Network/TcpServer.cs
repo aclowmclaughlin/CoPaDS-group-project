@@ -1,6 +1,7 @@
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
+using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
@@ -18,6 +19,9 @@ public class TcpServer
     private readonly List<Peer> _connectedPeers = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Thread? _listenThread;
+
+    private readonly Dictionary<string, List<Peer>> _rooms = new();
+    private object _rooms_lock = new();
 
     public event Action<Peer>? OnPeerConnected;
     public event Action<Peer>? OnPeerDisconnected;
@@ -276,4 +280,73 @@ public class TcpServer
             return _connectedPeers.ToList();
         }
     }
+
+    public IEnumerable<string> GetRoomNames()
+    {
+        lock(_rooms_lock)
+        {
+            return _rooms.Keys;
+        }
+    }
+
+    public List<Peer>? GetPeersInRoom(string room_name)
+    {
+        List<Peer>? peersInRoom = null;
+        lock(_rooms_lock)
+        {
+            bool room_exists = _rooms.TryGetValue(room_name, out peersInRoom);
+            // returns null if no peers in room.
+        }
+        return peersInRoom;
+    }
+
+    public bool CreateRoom(string room_name)
+    {
+        // returns true if the room existed already, 
+        // false if the room did not exist (and was thus added)
+        lock(_rooms_lock)
+        {
+            if(_rooms.TryGetValue(room_name, out _)) return true;
+            _rooms.Add(room_name, new List<Peer>());
+        }
+        return false;
+    }
+
+    public bool AddToRoom(string room_name, Peer peer)
+    {
+        // returns false if the room doesn't exist,
+        // true if the room was updated with the peer (or already had the peer)
+        lock(_rooms_lock)
+        {
+            List<Peer>? currentPeersInRoom;
+            if(_rooms.TryGetValue(room_name, out currentPeersInRoom)) return false;
+            if (currentPeersInRoom!.Contains(peer)) 
+            {
+                return true;
+            }
+            currentPeersInRoom.Add(peer);
+            _rooms[room_name] = currentPeersInRoom;
+        }
+        return true;
+    }
+
+        public bool RemoveFromRoom(string room_name, Peer peer)
+    {
+        // returns false if the room doesn't exist,
+        // true if the peer was removed (or didn't exist in the room)
+        lock(_rooms_lock)
+        {
+            List<Peer>? currentPeersInRoom;
+            if(_rooms.TryGetValue(room_name, out currentPeersInRoom)) return false;
+            // remove from room
+            if (currentPeersInRoom!.Contains(peer)) 
+            {
+                currentPeersInRoom.Remove(peer);
+                _rooms[room_name] = currentPeersInRoom;
+                return true;
+            }
+        }
+        return true;
+    }
+
 }
