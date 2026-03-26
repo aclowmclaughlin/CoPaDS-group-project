@@ -479,13 +479,29 @@ class Program
                 break;
             
             case MessageType.ListRoomsReply:
+                string[] room_names = message.Content.Split(",");
                 //TODO update any methods currently waiting for a list rooms reply
                 break;
             case MessageType.ListPeersReply:
+                string[] peer_names = message.Content.Split(",");
                 //TODO update any methods currently waiting for a list peers reply
                 break;
             case MessageType.ListPeersInRoomReply:
+                // unpacking the message:
+                string room_name = message.Room;
+                string[] peersAndPrivateKey = message.Content.Split(",");
+                Dictionary<string, byte[]> peerKeys = new();
+                foreach (string peer_and_key in peersAndPrivateKey)
+                {
+                    var split = peer_and_key.Split(":");
+                    string name = split[0];
+                    string key = split[1];
+                    //TODO probably should check for errors
+                    peerKeys[name] = Encoding.UTF8.GetBytes(key);
+                }
                 //TODO update any methods currently waiting for a list peers in rooms reply
+                // I think this can be done with a TaskCompletionSource?
+                // Or just something like Monitor.Wait, probably
                 break;
 
             case MessageType.CreateRoom:
@@ -493,7 +509,7 @@ class Program
             case MessageType.LeaveRoom:
             case MessageType.ListPeers:
             case MessageType.ListPeersInRoom:
-                //server messages
+                //server messages- don't do anything.
                 Console.WriteLine("Got message intended for a server.");
                 break;
             default:
