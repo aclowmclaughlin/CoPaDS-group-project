@@ -155,6 +155,7 @@ public class TcpServer
                 {
                     // deserialization failed, cry or smthn.
                     Console.WriteLine("Received Message but couldn't deserialize ;-;");
+                    continue;
                 }
 
                 OnMessageReceived?.Invoke(peer, message);

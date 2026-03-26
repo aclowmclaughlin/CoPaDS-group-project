@@ -34,7 +34,7 @@ public enum ConnectionState
 
 public class KeyExchange
 {
-    private RsaEncryption? _rsa;
+    private readonly RsaEncryption _rsa;
     private byte[]? _peerPublicKey;
     private byte[]? _sessionKey;
 

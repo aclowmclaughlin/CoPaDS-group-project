@@ -72,7 +72,12 @@ public class TcpClientHandler
     {
         try
         {
-            StreamReader? stream = new StreamReader(peer.Stream); // possible null, fix later
+            if(peer.Stream == null)
+            {
+                Console.WriteLine($"Peer {peer.Id} has no stream.");
+                return;
+            }
+            StreamReader? stream = new StreamReader(peer.Stream);
             while (peer.IsConnected) {
                 var length_str = await stream.ReadLineAsync(); // need to wait until input
                 if (length_str == null) break;
@@ -95,6 +100,7 @@ public class TcpClientHandler
                 {
                     // deserialization failed, cry or smthn.
                     Console.WriteLine("Received Message but couldn't deserialize ;-;");
+                    continue;
                 }
 
                 OnMessageReceived?.Invoke(peer, message);

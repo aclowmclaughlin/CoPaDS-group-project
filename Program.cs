@@ -311,16 +311,19 @@ class Program
     // - HandlePeerConnected(Peer peer) - event handler for new connections
     // - HandleMessageReceived(Peer peer, Message message) - event handler for messages
 
-    private static async Task ProcessServerIncomingMessages()
+    private static Task ProcessServerIncomingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){ //checks that it's not cancelled
+        while (!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
+        {
             var msg = serverMessageQueue!.DequeueIncoming(); //deque
             if (msg != null)
-                {
-                    Console.WriteLine($"Server Received Message: {msg.ToString()}");
-                    // consoleUI?.DisplayMessage(msg);
-                }
+            {
+                Console.WriteLine($"Server Received Message: {msg.ToString()}");
+                // consoleUI?.DisplayMessage(msg);
             }
+        }
+
+        return Task.CompletedTask;
     }
 
     private static async Task SendServerOutgoingMessages()
@@ -353,15 +356,18 @@ class Program
         }
     }
 
-    private static async Task ProcessClientIncomingMessages()
+    private static Task ProcessClientIncomingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){ //checks that it's not cancelled
+        while (!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
+        {
             var msg = clientMessageQueue!.DequeueIncoming(); //deque
             if (msg != null)
-                {
-                    consoleUI?.DisplayMessage(msg);
-                }
+            {
+                consoleUI?.DisplayMessage(msg);
             }
+        }
+
+        return Task.CompletedTask;
     }
 
     private static async Task SendClientOutgoingMessages()
