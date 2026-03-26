@@ -3,13 +3,22 @@
 
 namespace SecureMessenger.Core;
 
+// Server messages are meant to be handled by the server
+// client messages should just be forwared by the server.
 public enum MessageType
 {
+    // client messages
     Chat,
     PublicKey,
     SessionKey,
-    RoomCommand,
     RoomChat,
+
+    // server messages
+    ListPeers,
+    ListRooms,
+    ListPeersInRoom,
+    LeaveRoom,
+    CreateRoom,
 }
 
 /// <summary>
