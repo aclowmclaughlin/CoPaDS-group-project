@@ -456,7 +456,7 @@ class Program
         switch(message.Type) // Handle messages differently based on message type
         {
             case MessageType.PublicKey:
-                HandlePublicKeyMessage(peer, message);
+                HandlePublicKeyMessage(peer, message, generateSessionKey: !isServerSide);
                 break;
 
             case MessageType.SessionKey:
@@ -485,42 +485,40 @@ class Program
     /// Processes a received public key message, stores the peer's public key, generates an AES session key if needed, 
     /// and sends the encrypted session key back.
     /// </summary>
-    private static void HandlePublicKeyMessage(Peer peer, Message message)
+    private static void HandlePublicKeyMessage(Peer peer, Message message, bool generateSessionKey)
     {
         if(message.PublicKey == null)
-        {
             return;
-        }
 
         // Receive public key for peer
         peer.PublicKey = message.PublicKey;
         Console.WriteLine($"Received public key from {peer.Id}");
 
+        if(!generateSessionKey || peer.AesKey != null)
+            return;
+
         // Create new AES key if doesn't already exist and send it to peer
-        if(peer.AesKey == null)
+        byte[] sessionKey = AesEncryption.GenerateKey();
+        var aes = new AesEncryption(sessionKey);
+        peer.AesKey = sessionKey;
+
+        lock(peerEncryptionLock)
         {
-            byte[] sessionKey = AesEncryption.GenerateKey();
-            var aes = new AesEncryption(sessionKey);
-            peer.AesKey = sessionKey;
-
-            lock(peerEncryptionLock)
-            {
-                peerEncryption[peer.Id] = aes; // Locally store new AES key
-            }
-
-            // Encrypt and send generated AES key
-            byte[] encryptedSessionKey = rsaEncryption.EncryptSessionKey(sessionKey, peer.PublicKey);
-
-            var sessionKeyMessage = new Message
-            {
-                Type                = MessageType.SessionKey,
-                Sender              = localUserName,
-                TargetPeerID        = peer.Id,
-                EncryptedSessionKey = encryptedSessionKey
-            };
-
-            _ = SendToPeerAsync(peer, sessionKeyMessage);
+            peerEncryption[peer.Id] = aes; // Locally store new AES key
         }
+
+        // Encrypt and send generated AES key
+        byte[] encryptedSessionKey = rsaEncryption.EncryptSessionKey(sessionKey, peer.PublicKey);
+
+        var sessionKeyMessage = new Message
+        {
+            Type                = MessageType.SessionKey,
+            Sender              = localUserName,
+            TargetPeerID        = peer.Id,
+            EncryptedSessionKey = encryptedSessionKey
+        };
+
+        _ = SendToPeerAsync(peer, sessionKeyMessage);
     }
 
     /// <summary>
