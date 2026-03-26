@@ -8,6 +8,9 @@ using System.Globalization;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json.Serialization;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.Security;
@@ -104,12 +107,12 @@ class Program
         // 3. TcpServer.OnPeerDisconnected - handle disconnections
         // 4. TcpClientHandler events (same pattern)
 
-        tcpServer.OnPeerConnected += HandlePeerConnected;
+        tcpServer.OnPeerConnected += HandleServerPeerConnected;
         tcpServer.OnMessageReceived += HandleServerMessageReceived;
         tcpServer.OnPeerDisconnected += peer =>
             Console.WriteLine("Disconnected peer " + peer.Id);
         
-        tcpClientHandler.OnConnected+= HandlePeerConnected;
+        tcpClientHandler.OnConnected+= HandleClientPeerConnected;
         tcpClientHandler.OnMessageReceived+= HandleClientMessageReceived;
         tcpClientHandler.OnDisconnected += peer =>
             Console.WriteLine("disconnected ;)");
@@ -332,12 +335,155 @@ class Program
         Console.WriteLine("Goodbye!");
     }
 
-    // TODO: Add helper methods as needed
-    // Examples:
-    // - ProcessIncomingMessages() - background task to process received messages
-    // - SendOutgoingMessages() - background task to send queued messages
-    // - HandlePeerConnected(Peer peer) - event handler for new connections
-    // - HandleMessageReceived(Peer peer, Message message) - event handler for messages
+    private static void HandleServerMessageReceived(Peer peer, Message message)
+    {
+        // TODO implement this
+        // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE
+        // OF THE SERVER MESSAGE QUEUE
+        switch (message.Type)
+        {
+            case MessageType.RoomChat:
+            case MessageType.PublicKey:
+            case MessageType.SessionKey:
+            case MessageType.Chat:
+                // these are all just to be forwarded.
+                // this is just checking if the peer exists, but it's not strictly necessary
+                Peer? destPeer = null;
+                string forwarding_id = message.TargetPeerID;
+                foreach(Peer other_peer in tcpServer!.GetConnectedPeers())
+                {
+                    if (other_peer.Id == forwarding_id)
+                    {
+                        destPeer = other_peer;
+                        break;
+                    }
+                }
+                // check for the request peer not existing
+                if (destPeer == null)
+                {
+                    Console.WriteLine($"Got a message destined for Peer {forwarding_id}, but no peer with that id exists");
+                    //TODO maybe in future send something back to the peer that requested this
+                }
+                // forward message to matched peer
+                serverMessageQueue!.EnqueueOutgoing(message);
+                break;
+            // server commands!
+            case MessageType.ListPeers:
+                {
+                    // The list peers message has contents that are just a list of peer ids.
+                    // in the form peer_id,peer_id2,peer_id3,...
+                    var peers_list = tcpServer!.GetConnectedPeers();
+                    string peers_list_str = "";
+                    
+                    foreach (Peer our_peers in peers_list) {
+                        peers_list_str += our_peers.Id + ",";
+                    }
+                    Message response_message = new Message
+                    {
+                        Type=MessageType.ListPeersReply,
+                        TargetPeerID = peer.Id,
+                        Content=peers_list_str
+                    };
+                    serverMessageQueue!.EnqueueOutgoing(response_message);
+                }                
+                break;
+            case MessageType.ListRooms:
+                {
+                    // the list rooms message has contents that are just a list of rooms in the form:
+                    // room_id1,room_id2,room_id3
+                    var rooms_list = tcpServer!.ListRooms();
+                    string rooms_list_str = "";
+                    
+                    foreach (string room_name in rooms_list) {
+                        rooms_list_str += room_name + ",";
+                    }
+                    Message response_message = new Message
+                    {
+                        Type=MessageType.ListRoomsReply,
+                        TargetPeerID = peer.Id,
+                        Content=rooms_list_str
+                    };
+                    serverMessageQueue!.EnqueueOutgoing(response_message);
+                }
+                break;
+            case MessageType.CreateRoom:
+                {
+                    // create the room
+                    string room_name = message.Room;
+                    tcpServer!.CreateRoom(room_name);
+                }
+                break;
+            case MessageType.LeaveRoom:
+                {
+                    // leave the room
+                    string room_name = message.Room;
+                    tcpServer!.RemoveFromRoom(room_name, peer);
+                }
+                break;
+            case MessageType.ListPeersInRoom:
+                {
+                    // the listPeersInRoom message has contents that are
+                    // peer_id:PublicKey,peer_id:PublicKey,...
+                    string room_name = message.Room;
+                    var peers_list = tcpServer!.GetPeersInRoom(room_name);
+                    if (peers_list == null)
+                    {
+                        // room doesn't exist
+                        break;
+                    }
+                    string peers_in_room_str = "";
+                    foreach (Peer other_peer in peers_list)
+                    {
+                        peers_in_room_str += other_peer.Id + "," + Encoding.UTF8.GetString(other_peer.PublicKey!);
+                    }
+                    Message response_message = new Message
+                    {
+                        Type=MessageType.ListPeersInRoomReply,
+                        TargetPeerID = peer.Id,
+                        Content=peers_in_room_str
+                    };
+                    serverMessageQueue!.EnqueueOutgoing(response_message);
+
+                }
+                break;
+        }
+    }
+
+    private static void HandleServerPeerConnected(Peer peer)
+    {
+        var public_key_truncated = peer.Id.Substring(0, 10) + "...";
+        Console.WriteLine($"[server] Peer {peer.Id} connected. Public Key: {public_key_truncated}");
+    }
+
+    private static void HandleClientPeerConnected(Peer peer)
+    {
+        Console.WriteLine($"Connected to Server at {peer.Address}, {peer.Port}");
+    }
+
+    private static void HandleClientMessageReceived(Peer peer, Message message)
+    {
+        //TODO fix this
+        // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE OF THE CLIENT MESSAGE QUEUE
+        switch(message.Type) // Handle messages differently based on message type
+        {
+            case MessageType.PublicKey:
+                HandlePublicKeyMessage(message);
+                break;
+
+            case MessageType.SessionKey:
+                HandleSessionKeyMessage(message);
+                break;
+
+            case MessageType.Chat:
+                HandleEncryptedChatMessage(message);
+                break;
+
+            default:
+                clientMessageQueue!.EnqueueIncoming(message);
+                break;
+        }
+    }
+
 
     private static Task ProcessServerIncomingMessages()
     {
@@ -488,37 +634,6 @@ class Program
         }
     }
 
-    private static void HandleServerMessageReceived(Peer peer, Message message)
-    {
-        // TODO implement this
-        switch (message.Type)
-        {
-            
-        }
-    }
-
-    private static void HandleClientMessageReceived(Peer peer, Message message)
-    {
-        //TODO fix this
-        switch(message.Type) // Handle messages differently based on message type
-        {
-            case MessageType.PublicKey:
-                HandlePublicKeyMessage(message);
-                break;
-
-            case MessageType.SessionKey:
-                HandleSessionKeyMessage(message);
-                break;
-
-            case MessageType.Chat:
-                HandleEncryptedChatMessage(message);
-                break;
-
-            default:
-                clientMessageQueue!.EnqueueIncoming(message);
-                break;
-        }
-    }
 
     /// <summary>
     /// Processes a received public key message, stores the peer's public key, 

@@ -281,7 +281,7 @@ public class TcpServer
         }
     }
 
-    public IEnumerable<string> GetRoomNames()
+    public IEnumerable<string> ListRooms()
     {
         lock(_rooms_lock)
         {
@@ -330,7 +330,7 @@ public class TcpServer
         return true;
     }
 
-        public bool RemoveFromRoom(string room_name, Peer peer)
+    public bool RemoveFromRoom(string room_name, Peer peer)
     {
         // returns false if the room doesn't exist,
         // true if the peer was removed (or didn't exist in the room)

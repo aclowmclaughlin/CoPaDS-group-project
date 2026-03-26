@@ -13,7 +13,7 @@ public enum MessageType
     SessionKey,
     RoomChat,
 
-    // server messages
+    // server messages (and replies)
     ListPeers,
     ListPeersReply,
     ListRooms,
