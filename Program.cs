@@ -337,7 +337,6 @@ class Program
 
     private static void HandleServerMessageReceived(Peer peer, Message message)
     {
-        // TODO implement this
         // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE
         // OF THE SERVER MESSAGE QUEUE
         switch (message.Type)
