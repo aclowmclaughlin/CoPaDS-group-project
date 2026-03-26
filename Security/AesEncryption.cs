@@ -61,8 +61,8 @@ public class AesEncryption
 
         byte[] result = new byte[aes.IV.Length + ciphertext.Length];
         
-        Buffer.BlockCopy(result, 0, aes.IV, 0, aes.IV.Length);
-        Buffer.BlockCopy(result, aes.IV.Length, ciphertext, 0, ciphertext.Length);
+        Buffer.BlockCopy(aes.IV, 0, result, 0, aes.IV.Length);
+        Buffer.BlockCopy(ciphertext, 0, result, aes.IV.Length, ciphertext.Length);
         return result;
     }
 
@@ -76,11 +76,11 @@ public class AesEncryption
         aes.Mode = CipherMode.CBC;
         // extract IV from ciphertext
         byte[] extracted_iv = new byte[IV_LENGTH];
-        Buffer.BlockCopy(extracted_iv, 0, ciphertext, 0, IV_LENGTH);
+        Buffer.BlockCopy(ciphertext, 0, extracted_iv, 0, IV_LENGTH);
         aes.IV = extracted_iv;
         // extract ciphertext from new ciphertext
         byte[] extracted_ciphertext = new byte[ciphertext.Length - IV_LENGTH];
-        Buffer.BlockCopy(extracted_ciphertext, 0, ciphertext, IV_LENGTH, ciphertext.Length - IV_LENGTH);
+        Buffer.BlockCopy(extracted_ciphertext, IV_LENGTH, ciphertext, 0, ciphertext.Length);
         // create decryptor
         var decryptor = aes.CreateDecryptor();
         // decrypt
