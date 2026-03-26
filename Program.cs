@@ -473,10 +473,29 @@ class Program
                 HandleSessionKeyMessage(message);
                 break;
 
+            case MessageType.RoomChat:
             case MessageType.Chat:
                 HandleEncryptedChatMessage(message);
                 break;
+            
+            case MessageType.ListRoomsReply:
+                //TODO update any methods currently waiting for a list rooms reply
+                break;
+            case MessageType.ListPeersReply:
+                //TODO update any methods currently waiting for a list peers reply
+                break;
+            case MessageType.ListPeersInRoomReply:
+                //TODO update any methods currently waiting for a list peers in rooms reply
+                break;
 
+            case MessageType.CreateRoom:
+            case MessageType.ListRooms:
+            case MessageType.LeaveRoom:
+            case MessageType.ListPeers:
+            case MessageType.ListPeersInRoom:
+                //server messages
+                Console.WriteLine("Got message intended for a server.");
+                break;
             default:
                 clientMessageQueue!.EnqueueIncoming(message);
                 break;
