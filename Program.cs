@@ -153,7 +153,7 @@ class Program
                     Console.WriteLine("Quitting program ;)");
                     break;
                 case CommandType.Connect:
-                    if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[2], out int port))
+                    if (resulty.Args != null && resulty.Args.Length >= 3 && int.TryParse(resulty.Args[2], out int port))
                     {
                         peery = port;
 
@@ -173,7 +173,7 @@ class Program
                     }
                     break;
                 case CommandType.Listen:
-                    if (resulty.Args != null && resulty.Args.Length >= 1 && int.TryParse(resulty.Args[1], out int listenPort))
+                    if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[1], out int listenPort))
                     {
                         Console.WriteLine("Starting TCP Server");
                         tcpServer.Start(listenPort);
