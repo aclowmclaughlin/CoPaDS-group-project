@@ -463,6 +463,11 @@ class Program
     {
         //TODO fix this
         // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE OF THE CLIENT MESSAGE QUEUE
+        if (message.TargetPeerID != localUserName)
+        {
+            // This message was not for us!! Ignore it.
+            return;
+        }
         switch(message.Type) // Handle messages differently based on message type
         {
             case MessageType.PublicKey:
