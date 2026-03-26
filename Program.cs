@@ -66,6 +66,12 @@ class Program
 
      //private static MessageHistory? messageHistory;   <--not implemented, will use later 
 
+    private static readonly RsaEncryption rsaEncryption = new();
+    private static readonly MessageSigner messageSigner = new(rsaEncryption.Rsa);
+    private static readonly Dictionary<string, AesEncryption> peerEncryption = new();
+    private static readonly object peerEncryptionLock = new();
+    private static string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
+    
     public static int peery = 0;
 
     static async Task Main(string[] args)
@@ -109,10 +115,10 @@ class Program
         // Note: TcpServer.Start() will create its own listen thread
         List<Task> tasklist = new List<Task>();
         
-        var pcim = Task.Run(ProcessClientIncomingMessages);
-        var scom = Task.Run(SendClientOutgoingMessages);
-        var psim = Task.Run(ProcessServerIncomingMessages);
-        var ssom = Task.Run(SendServerOutgoingMessages);
+        tasklist.Add(Task.Run(ProcessClientIncomingMessages));  // pcim
+        tasklist.Add(Task.Run(SendClientOutgoingMessages));     // scom
+        tasklist.Add(Task.Run(ProcessServerIncomingMessages));  // psim
+        tasklist.Add(Task.Run(SendServerOutgoingMessages));     // ssom
 
 
         Console.WriteLine("Type /help for available commands");
