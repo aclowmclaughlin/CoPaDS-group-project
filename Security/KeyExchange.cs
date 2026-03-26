@@ -41,6 +41,8 @@ public class KeyExchange
     public ConnectionState State { get; private set; } = ConnectionState.Disconnected;
     public byte[]? SessionKey => _sessionKey;
 
+    public MessageSigner Signer => new MessageSigner(_rsa.Rsa);
+
     /// <summary>
     /// Initialize the key exchange by creating our RSA key pair.
     /// </summary>
@@ -73,13 +75,16 @@ public class KeyExchange
     /// </summary>
     public byte[] CreateEncryptedSessionKey()
     {
+        if (_peerPublicKey == null)
+        {
+            throw new InvalidOperationException("Peer public key must be received before creating a session key.");
+        }
+
         _sessionKey = AesEncryption.GenerateKey();
         //store a new key ;)
 
         State = ConnectionState.SendingSessionKey;
-        return _rsa!.EncryptSessionKey(_sessionKey, _peerPublicKey!);
-        //The exclamation point says "I promise it won't be null"
-
+        return _rsa.EncryptSessionKey(_sessionKey, _peerPublicKey);
     }
 
     /// <summary>

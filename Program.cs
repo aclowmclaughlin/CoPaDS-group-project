@@ -66,18 +66,21 @@ class Program
 
      //private static MessageHistory? messageHistory;   <--not implemented, will use later 
 
-    private static readonly RsaEncryption rsaEncryption = new();
-    private static readonly MessageSigner messageSigner = new(rsaEncryption.Rsa);
     private static readonly Dictionary<string, AesEncryption> peerEncryption = new();
     private static readonly object peerEncryptionLock = new();
-    private static string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
+
+    private static readonly Dictionary<string, KeyExchange> peerKeyExchanges = new();
+    private static readonly object peerKeyExchangeLock = new();
+
+    private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
     
     public static int peery = 0;
 
     static async Task Main(string[] args)
     {
-        Console.WriteLine("Secure Distributed Messenger");
-        Console.WriteLine("============================");
+        Console.WriteLine("================================");
+        Console.WriteLine("| Secure Distributed Messenger |");
+        Console.WriteLine("================================");
 
         // 1. Create CancellationTokenSource for shutdown signaling     X
         // 2. Create MessageQueue for thread communication              X
@@ -122,7 +125,6 @@ class Program
 
 
         Console.WriteLine("Type /help for available commands");
-        Console.WriteLine();
 
         // Main loop - handle user input
         bool running = true;
@@ -344,7 +346,7 @@ class Program
                 var msg = serverMessageQueue!.DequeueIncoming(); //deque
                 if (msg != null)
                 {
-                    Console.WriteLine($"Server Received Message: {msg.ToString()}");
+                    Console.WriteLine($"[server] Received {msg.Type} from {msg.Sender} (encrypted={msg.EncryptedContent != null}, bytes={msg.EncryptedContent?.Length ?? 0})");
                     // consoleUI?.DisplayMessage(msg);
                 }
             }
@@ -439,12 +441,19 @@ class Program
     {
         Console.WriteLine($"Connected to {peer.Id} *Transformer noises*");
 
+        KeyExchange keyExchange = new KeyExchange();
+
+        lock (peerKeyExchangeLock)
+        {
+            peerKeyExchanges[peer.Id] = keyExchange;
+        }
+
         var publicKeyMessage = new Message
         {
             Type            = MessageType.PublicKey,
             Sender          = localUserName,
             TargetPeerID    = string.Empty, // TODO: peer.Id in future
-            PublicKey       = rsaEncryption.ExportPublicKey()
+            PublicKey       = keyExchange.GetPublicKey()
         };
 
         // Send RSA public key to peer immediately when new connection is made        
@@ -517,35 +526,54 @@ class Program
         if(message.PublicKey == null)
             return;
 
+        KeyExchange? keyExchange;
+        lock (peerKeyExchangeLock)
+        {
+            peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
+        }
+
+        if(keyExchange == null)
+        {
+            Console.WriteLine($"No key exchange state found for {peer.Id}");
+            return;
+        }
+
         // Receive public key for peer
+        keyExchange.ReceivePublicKey(message.PublicKey);
         peer.PublicKey = message.PublicKey;
+
         Console.WriteLine($"Received public key from {peer.Id}");
 
-        if(!generateSessionKey || peer.AesKey != null)
+        if(!generateSessionKey || keyExchange.IsEstablished || peer.AesKey != null)
             return;
 
-        // Create new AES key if doesn't already exist and send it to peer
-        byte[] sessionKey = AesEncryption.GenerateKey();
-        var aes = new AesEncryption(sessionKey);
-        peer.AesKey = sessionKey;
+        // Encrypt and send generated AES key
+        byte[] encryptedSessionKey = keyExchange.CreateEncryptedSessionKey();
+
+        if(keyExchange.SessionKey == null)
+        {
+            Console.WriteLine($"Failed to create session key for {peer.Id}");
+            return;
+        }
+
+        peer.AesKey = keyExchange.SessionKey;
 
         lock(peerEncryptionLock)
         {
-            peerEncryption[peer.Id] = aes; // Locally store new AES key
+            peerEncryption[peer.Id] = new AesEncryption(keyExchange.SessionKey);
         }
-
-        // Encrypt and send generated AES key
-        byte[] encryptedSessionKey = rsaEncryption.EncryptSessionKey(sessionKey, peer.PublicKey);
 
         var sessionKeyMessage = new Message
         {
-            Type                = MessageType.SessionKey,
-            Sender              = localUserName,
-            TargetPeerID        = string.Empty, // TODO: peer.Id in future
+            Type = MessageType.SessionKey,
+            Sender = localUserName,
+            TargetPeerID = string.Empty,
             EncryptedSessionKey = encryptedSessionKey
         };
 
         _ = SendToPeerAsync(peer, sessionKeyMessage);
+
+        keyExchange.Complete();
     }
 
     /// <summary>
@@ -555,17 +583,34 @@ class Program
     private static void HandleSessionKeyMessage(Peer peer, Message message)
     {
         if(message.EncryptedSessionKey == null)
+            return;
+
+        KeyExchange? keyExchange;
+        lock(peerKeyExchangeLock)
         {
+            peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
+        }
+
+        if(keyExchange == null)
+        {
+            Console.WriteLine($"No key exchange state found for {peer.Id}");
             return;
         }
 
         // Receive AES session key and decrypt it
-        byte[] sessionKey = rsaEncryption.DecryptSessionKey(message.EncryptedSessionKey);
-        peer.AesKey = sessionKey;
+        keyExchange.ReceiveEncryptedSessionKey(message.EncryptedSessionKey);
+
+        if(keyExchange.SessionKey == null)
+        {
+            Console.WriteLine($"Failed to establish session key for {peer.Id}");
+            return;
+        }
+
+        peer.AesKey = keyExchange.SessionKey;
 
         lock(peerEncryptionLock)
         {
-            peerEncryption[peer.Id] = new AesEncryption(sessionKey); // Store peer's session key locally
+            peerEncryption[peer.Id] = new AesEncryption(keyExchange.SessionKey);
         }
 
         Console.WriteLine($"Session key established with {peer.Id}");
@@ -597,14 +642,26 @@ class Program
     private static Message CreateEncryptedChatMessage(Peer peer, Message logicalMessage)
     {
         AesEncryption aes;
+        KeyExchange? keyExchange;
+
         lock(peerEncryptionLock)
         {
             aes = peerEncryption[peer.Id];
         }
 
+        lock (peerKeyExchangeLock)
+        {
+            peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
+        }
+
+        if (keyExchange == null)
+        {
+            throw new InvalidOperationException($"No key exchange state found for peer {peer.Id}");
+        }
+
         // Encrypt, sign, and return given message using peer's AES session key
         byte[] encryptedBytes = aes.Encrypt(logicalMessage.Content);
-        byte[] signature = messageSigner.SignData(encryptedBytes);
+        byte[] signature = keyExchange.Signer.SignData(encryptedBytes); // Use keyExchange for peer to sign data
 
         return new Message
         {
@@ -633,8 +690,20 @@ class Program
         }
 
         // Validate signature of message using peer's public key
-        bool valid = messageSigner.VerifyData(message.EncryptedContent, message.Signature, peer.PublicKey);
-        if(!valid)
+        KeyExchange? keyExchange;
+        lock (peerKeyExchangeLock)
+        {
+            peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
+        }
+
+        if (keyExchange == null)
+        {
+            Console.WriteLine($"No key exchange state found for peer {peer.Id}");
+            return false;
+        }
+
+        bool valid = keyExchange.Signer.VerifyData(message.EncryptedContent, message.Signature, peer.PublicKey);
+        if (!valid)
         {
             Console.WriteLine("Signature verification failed");
             return false;
