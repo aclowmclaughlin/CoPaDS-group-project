@@ -325,12 +325,30 @@ class Program
 
     private static async Task SendServerOutgoingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){  //not cancelled
-            var msg = serverMessageQueue!.DequeueOutgoing(); //deque
-            if (msg != null && tcpServer != null)
+        while(!cancellationTokenSource!.Token.IsCancellationRequested)
+        {
+            Message? msg = serverMessageQueue!.DequeueOutgoing();
+            if (msg == null || tcpServer == null)
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrWhiteSpace(msg.TargetPeerID))
+            {
+                Peer? targetPeer = tcpServer.GetConnectedPeers().FirstOrDefault(peer => peer.Id == msg.TargetPeerID);
+
+                if (targetPeer != null) // Send specifically to single peer
+                {
+                    await tcpServer.SendToPeerAsync(targetPeer, msg);
+                }
+                else
+                {
+                    Console.WriteLine($"Target peer not found: {msg.TargetPeerID}");
+                }
+            }
+            else // Otherwise, broadcast to all connected
             {
                 await tcpServer.BroadcastAsync(msg);
-                //sends msg, deques and broadcasts
             }
         }
     }
@@ -348,12 +366,37 @@ class Program
 
     private static async Task SendClientOutgoingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested){  //not cancelled
-            var msg = clientMessageQueue!.DequeueOutgoing(); //deque
-            if (msg != null && tcpClientHandler != null)
+        while(!cancellationTokenSource!.Token.IsCancellationRequested)
+        {
+            Message? logicalMessage = clientMessageQueue!.DequeueOutgoing();
+
+            // Skip empty messages
+            if(logicalMessage == null || tcpClientHandler == null)
             {
-                await tcpClientHandler.BroadcastAsync(msg);
-                //sends msg, deques and broadcasts
+                continue;
+            }
+
+            var peers = tcpClientHandler.GetConnectedPeers().ToList();
+            
+            // Send differently encrypted message to each peer
+            foreach(var peer in peers)
+            {
+                // Ensure session already exists
+                bool hasSession;
+                lock(peerEncryptionLock)
+                {
+                    hasSession = peerEncryption.ContainsKey(peer.Id);
+                }
+
+                if(!hasSession)
+                {
+                    Console.WriteLine($"No AES session established with {peer.Id}; skipping");
+                    continue;
+                }
+
+                // Encrypt using peer's session key and send message
+                Message encryptedCopy = CreateEncryptedChatMessage(peer, logicalMessage);
+                await tcpClientHandler.SendAsync(peer.Id, encryptedCopy);
             }
         }
     }
@@ -382,7 +425,7 @@ class Program
             await tcpClientHandler.SendAsync(peer.Id, message);
             return;
         }
-        
+
         if (tcpServer != null)
         {
             await tcpServer.SendToPeerAsync(peer, message);
@@ -391,12 +434,204 @@ class Program
 
     private static void HandleServerMessageReceived(Peer peer, Message message)
     {
-        serverMessageQueue!.EnqueueIncoming(message);
-        serverMessageQueue!.EnqueueOutgoing(message);
+        HandleIncomingMessage(peer, message, isServerSide: true);
     }
 
     private static void HandleClientMessageReceived(Peer peer, Message message)
     {
-        clientMessageQueue!.EnqueueIncoming(message);
+        HandleIncomingMessage(peer, message, isServerSide: false);
+    }
+
+    /// <summary>
+    /// Call helper method based on incoming message type to determine how to handle it
+    /// </summary>
+    private static void HandleIncomingMessage(Peer peer, Message message, bool isServerSide)
+    {
+        switch(message.Type) // Handle messages differently based on message type
+        {
+            case MessageType.PublicKey:
+                HandlePublicKeyMessage(peer, message);
+                break;
+
+            case MessageType.SessionKey:
+                HandleSessionKeyMessage(peer, message);
+                break;
+
+            case MessageType.Chat:
+                HandleEncryptedChatMessage(peer, message, isServerSide);
+                break;
+
+            default:
+                if(isServerSide)
+                {
+                    serverMessageQueue!.EnqueueIncoming(message);
+                    serverMessageQueue!.EnqueueOutgoing(message);
+                }
+                else
+                {
+                    clientMessageQueue!.EnqueueIncoming(message);
+                }
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Processes a received public key message, stores the peer's public key, generates an AES session key if needed, 
+    /// and sends the encrypted session key back.
+    /// </summary>
+    private static void HandlePublicKeyMessage(Peer peer, Message message)
+    {
+        if(message.PublicKey == null)
+        {
+            return;
+        }
+
+        // Receive public key for peer
+        peer.PublicKey = message.PublicKey;
+        Console.WriteLine($"Received public key from {peer.Id}");
+
+        // Create new AES key if doesn't already exist and send it to peer
+        if(peer.AesKey == null)
+        {
+            byte[] sessionKey = AesEncryption.GenerateKey();
+            var aes = new AesEncryption(sessionKey);
+            peer.AesKey = sessionKey;
+
+            lock(peerEncryptionLock)
+            {
+                peerEncryption[peer.Id] = aes; // Locally store new AES key
+            }
+
+            // Encrypt and send generated AES key
+            byte[] encryptedSessionKey = rsaEncryption.EncryptSessionKey(sessionKey, peer.PublicKey);
+
+            var sessionKeyMessage = new Message
+            {
+                Type                = MessageType.SessionKey,
+                Sender              = localUserName,
+                TargetPeerID        = peer.Id,
+                EncryptedSessionKey = encryptedSessionKey
+            };
+
+            _ = SendToPeerAsync(peer, sessionKeyMessage);
+        }
+    }
+
+    /// <summary>
+    /// Processes an encrypted session key message, decrypts the AES session key, and stores the resulting encryption 
+    /// session for the peer.
+    /// </summary>
+    private static void HandleSessionKeyMessage(Peer peer, Message message)
+    {
+        if(message.EncryptedSessionKey == null)
+        {
+            return;
+        }
+
+        // Receive AES session key and decrypt it
+        byte[] sessionKey = rsaEncryption.DecryptSessionKey(message.EncryptedSessionKey);
+        peer.AesKey = sessionKey;
+
+        lock(peerEncryptionLock)
+        {
+            peerEncryption[peer.Id] = new AesEncryption(sessionKey); // Store peer's session key locally
+        }
+
+        Console.WriteLine($"Session key established with {peer.Id}");
+    }
+
+    /// <summary>
+    /// Handles an encrypted chat message by relaying it when received on the server side or decrypting and verifying 
+    /// it when received on the client side.
+    /// </summary>
+    private static void HandleEncryptedChatMessage(Peer peer, Message message, bool isServerSide)
+    {
+        if(isServerSide)
+        {
+            serverMessageQueue!.EnqueueIncoming(message);
+            serverMessageQueue!.EnqueueOutgoing(message);
+            return;
+        }
+
+        if(TryDecryptAndVerify(peer, message, out Message? decryptedMessage) && decryptedMessage != null)
+        {
+            clientMessageQueue!.EnqueueIncoming(decryptedMessage);
+        }
+    }
+
+    /// <summary>
+    /// Creates an encrypted chat message for a specific peer by encrypting the plaintext content with that peer's AES
+    /// session and signing the ciphertext.
+    /// </summary>
+    private static Message CreateEncryptedChatMessage(Peer peer, Message logicalMessage)
+    {
+        AesEncryption aes;
+        lock(peerEncryptionLock)
+        {
+            aes = peerEncryption[peer.Id];
+        }
+
+        // Encrypt, sign, and return given message using peer's AES session key
+        byte[] encryptedBytes = aes.Encrypt(logicalMessage.Content);
+        byte[] signature = messageSigner.SignData(encryptedBytes);
+
+        return new Message
+        {
+            Type                = MessageType.Chat,
+            Sender              = logicalMessage.Sender,
+            TargetPeerID        = peer.Id,
+            Room                = logicalMessage.Room,
+            EncryptedContent    = encryptedBytes,
+            Signature           = signature,
+            Timestamp           = logicalMessage.Timestamp
+        };
+    }
+
+    /// <summary>
+    /// Attempts to verify the signature of an encrypted message, decrypt its content, and reconstruct the original 
+    /// plaintext chat message.
+    /// </summary>
+    private static bool TryDecryptAndVerify(Peer peer, Message message, out Message? decryptedMessage)
+    {
+        decryptedMessage = null;
+
+        if(message.EncryptedContent == null || message.Signature == null || peer.PublicKey == null)
+        {
+            Console.WriteLine("Missing encrypted content, signature, or public key");
+            return false;
+        }
+
+        // Validate signature of message using peer's public key
+        bool valid = messageSigner.VerifyData(message.EncryptedContent, message.Signature, peer.PublicKey);
+        if(!valid)
+        {
+            Console.WriteLine("Signature verification failed");
+            return false;
+        }
+
+        // Decrypt 
+        AesEncryption aes;
+        lock(peerEncryptionLock)
+        {
+            if(!peerEncryption.TryGetValue(peer.Id, out aes!))
+            {
+                Console.WriteLine("No AES session found for peer");
+                return false;
+            }
+        }
+
+        string plaintext = aes.Decrypt(message.EncryptedContent);
+
+        decryptedMessage = new Message
+        {
+            Type = MessageType.Chat,
+            Sender = message.Sender,
+            TargetPeerID = message.TargetPeerID,
+            Room = message.Room,
+            Content = plaintext,
+            Timestamp = message.Timestamp
+        };
+
+        return true;
     }
 }
