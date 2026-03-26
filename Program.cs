@@ -145,6 +145,12 @@ class Program
             var input = Console.ReadLine();
             if (string.IsNullOrEmpty(input)) continue;
 
+            if (consoleUI == null || tcpClientHandler == null || tcpServer == null)
+            {
+                Console.WriteLine("Application components are not initialized.");
+                return;
+            }
+
             var resulty = consoleUI.ParseCommand(input);
             switch (resulty.CommandType)
             {
@@ -185,8 +191,38 @@ class Program
                     break;
 
                 case CommandType.ListPeers:
-                    Console.WriteLine("List peers not implemented yet");
+                {
+                    var clientPeers = tcpClientHandler?.GetConnectedPeers().ToList() ?? new List<Peer>();
+                    var serverPeers = tcpServer?.GetConnectedPeers().ToList() ?? new List<Peer>();
+
+                    Console.WriteLine("Connected peers:");
+
+                    if(clientPeers.Count == 0 && serverPeers.Count == 0) // Nobody connected
+                    {
+                        Console.WriteLine("  (none)");
+                        break;
+                    }
+
+                    if(clientPeers.Count > 0) // List all clients in peer list
+                    {
+                        Console.WriteLine("  Outgoing/client connections:");
+                        foreach (var peer in clientPeers)
+                        {
+                            Console.WriteLine($"    {peer.Id}  {peer.Address}:{peer.Port}");
+                        }
+                    }
+
+                    if(serverPeers.Count > 0)
+                    {
+                        Console.WriteLine("  Incoming/server connections:");
+                        foreach (var peer in serverPeers)
+                        {
+                            Console.WriteLine($"    {peer.Id}  {peer.Address}:{peer.Port}");
+                        }
+                    }
+
                     break;
+                }
                 case CommandType.History:
                     Console.WriteLine("History isn't implemented yet");
                     break;
@@ -237,11 +273,7 @@ class Program
                     }
                     break;
                 case CommandType.ListRooms:
-                    if (resulty.Args != null) {
-                        string room_name = resulty.Args[1];
-                        // list rooms
-                        //TODO complete
-                    }
+                    Console.WriteLine("List rooms not implemented yet");
                     break;
                 case CommandType.MessageRoom:
                     if (resulty.Args == null 
@@ -259,28 +291,20 @@ class Program
                     }
                     break;
                 case CommandType.Exit:
-                    if (peery != 0)
-                    {
-                        Console.WriteLine("Disconnecting everything" );
-                        tcpClientHandler.DisconnectAll();
-                        // this nukes all connections
-                    }
-                    else
-                    {
-                        Console.WriteLine("no peer to disconnect silly");
-                    }
+                    Console.WriteLine("Disconnecting all client connections");
+                    tcpClientHandler?.DisconnectAll();
                     break;
                     
                 case CommandType.Unknown:
                     clientMessageQueue!.EnqueueOutgoing(
                         new Message
-                        {Content = input, Sender = Dns.GetHostName()+Environment.ProcessId.ToString()});
+                        {Content = input, Sender = localUserName});
                     break;
 
                 default:
                     clientMessageQueue!.EnqueueOutgoing(
                         new Message
-                        {Content = input, Sender = Dns.GetHostName()+Environment.ProcessId.ToString()});
+                        {Content = input, Sender = localUserName});
                     
                     break;
             }
@@ -296,7 +320,7 @@ class Program
         cancellationTokenSource!.Cancel();
 
         tcpServer?.Stop();
-        tcpClientHandler.DisconnectAll();        
+        tcpClientHandler?.DisconnectAll();        
         clientMessageQueue?.CompleteAdding();
         serverMessageQueue?.CompleteAdding();
 
@@ -315,12 +339,16 @@ class Program
     {
         while (!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
         {
-            var msg = serverMessageQueue!.DequeueIncoming(); //deque
-            if (msg != null)
+            try
             {
-                Console.WriteLine($"Server Received Message: {msg.ToString()}");
-                // consoleUI?.DisplayMessage(msg);
+                var msg = serverMessageQueue!.DequeueIncoming(); //deque
+                if (msg != null)
+                {
+                    Console.WriteLine($"Server Received Message: {msg.ToString()}");
+                    // consoleUI?.DisplayMessage(msg);
+                }
             }
+            catch (InvalidOperationException) { break; }
         }
 
         return Task.CompletedTask;
@@ -328,31 +356,21 @@ class Program
 
     private static async Task SendServerOutgoingMessages()
     {
-        while(!cancellationTokenSource!.Token.IsCancellationRequested)
+        while (!cancellationTokenSource!.Token.IsCancellationRequested)
         {
-            Message? msg = serverMessageQueue!.DequeueOutgoing();
+            Message? msg;
+            try
+            {
+                msg = serverMessageQueue!.DequeueOutgoing();
+            }
+            catch (InvalidOperationException) { break; }
+
             if (msg == null || tcpServer == null)
             {
                 continue;
             }
 
-            if (!string.IsNullOrWhiteSpace(msg.TargetPeerID))
-            {
-                Peer? targetPeer = tcpServer.GetConnectedPeers().FirstOrDefault(peer => peer.Id == msg.TargetPeerID);
-
-                if (targetPeer != null) // Send specifically to single peer
-                {
-                    await tcpServer.SendToPeerAsync(targetPeer, msg);
-                }
-                else
-                {
-                    Console.WriteLine($"Target peer not found: {msg.TargetPeerID}");
-                }
-            }
-            else // Otherwise, broadcast to all connected
-            {
-                await tcpServer.BroadcastAsync(msg);
-            }
+            await tcpServer.BroadcastAsync(msg);
         }
     }
 
@@ -360,11 +378,15 @@ class Program
     {
         while (!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
         {
-            var msg = clientMessageQueue!.DequeueIncoming(); //deque
-            if (msg != null)
+            try
             {
-                consoleUI?.DisplayMessage(msg);
+                var msg = clientMessageQueue!.DequeueIncoming(); //deque
+                if (msg != null)
+                {
+                    consoleUI?.DisplayMessage(msg);
+                }
             }
+            catch (InvalidOperationException) { break; }
         }
 
         return Task.CompletedTask;
@@ -374,7 +396,12 @@ class Program
     {
         while(!cancellationTokenSource!.Token.IsCancellationRequested)
         {
-            Message? logicalMessage = clientMessageQueue!.DequeueOutgoing();
+            Message? logicalMessage;
+            try
+            {
+                logicalMessage = clientMessageQueue!.DequeueOutgoing();
+            }
+            catch (InvalidOperationException) { break; }
 
             // Skip empty messages
             if(logicalMessage == null || tcpClientHandler == null)
@@ -414,10 +441,10 @@ class Program
 
         var publicKeyMessage = new Message
         {
-            Type = MessageType.PublicKey,
-            Sender = localUserName,
-            TargetPeerID = peer.Id,
-            PublicKey = rsaEncryption.ExportPublicKey()
+            Type            = MessageType.PublicKey,
+            Sender          = localUserName,
+            TargetPeerID    = string.Empty, // TODO: peer.Id in future
+            PublicKey       = rsaEncryption.ExportPublicKey()
         };
 
         // Send RSA public key to peer immediately when new connection is made        
@@ -514,7 +541,7 @@ class Program
         {
             Type                = MessageType.SessionKey,
             Sender              = localUserName,
-            TargetPeerID        = peer.Id,
+            TargetPeerID        = string.Empty, // TODO: peer.Id in future
             EncryptedSessionKey = encryptedSessionKey
         };
 
@@ -583,7 +610,7 @@ class Program
         {
             Type                = MessageType.Chat,
             Sender              = logicalMessage.Sender,
-            TargetPeerID        = peer.Id,
+            TargetPeerID        = string.Empty,
             Room                = logicalMessage.Room,
             EncryptedContent    = encryptedBytes,
             Signature           = signature,
@@ -628,12 +655,12 @@ class Program
 
         decryptedMessage = new Message
         {
-            Type = MessageType.Chat,
-            Sender = message.Sender,
-            TargetPeerID = message.TargetPeerID,
-            Room = message.Room,
-            Content = plaintext,
-            Timestamp = message.Timestamp
+            Type            = MessageType.Chat,
+            Sender          = message.Sender,
+            TargetPeerID    = message.TargetPeerID,
+            Room            = message.Room,
+            Content         = plaintext,
+            Timestamp       = message.Timestamp
         };
 
         return true;

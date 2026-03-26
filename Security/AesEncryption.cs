@@ -80,7 +80,7 @@ public class AesEncryption
         aes.IV = extracted_iv;
         // extract ciphertext from new ciphertext
         byte[] extracted_ciphertext = new byte[ciphertext.Length - IV_LENGTH];
-        Buffer.BlockCopy(extracted_ciphertext, IV_LENGTH, ciphertext, 0, extracted_ciphertext.Length);
+        Buffer.BlockCopy(ciphertext, IV_LENGTH, extracted_ciphertext, 0, extracted_ciphertext.Length);
         // create decryptor
         var decryptor = aes.CreateDecryptor();
         // decrypt

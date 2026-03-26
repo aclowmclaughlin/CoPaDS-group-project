@@ -128,8 +128,14 @@ public class TcpServer
     {
         try
         {
+            if (peer.Stream == null)
+            {
+                Console.WriteLine($"Peer {peer.Id} has no stream.");
+                return;
+            }
+
             // Create a StreamReader from the peer's stream
-            using var reader = new StreamReader(peer.Stream!);
+            using var reader = new StreamReader(peer.Stream);
 
             // Loop while peer is connected and cancellation not requested
             while(peer.IsConnected && !_cancellationTokenSource!.Token.IsCancellationRequested)
@@ -179,7 +185,7 @@ public class TcpServer
         List<Peer> allPeers;
         lock (_connectedPeers)
         {
-            allPeers = _connectedPeers;
+            allPeers = _connectedPeers.ToList();
         }
 
         foreach (Peer peer in allPeers)

@@ -77,7 +77,7 @@ public class TcpClientHandler
                 Console.WriteLine($"Peer {peer.Id} has no stream.");
                 return;
             }
-            StreamReader? stream = new StreamReader(peer.Stream);
+            using var stream = new StreamReader(peer.Stream);
             while (peer.IsConnected) {
                 var length_str = await stream.ReadLineAsync(); // need to wait until input
                 if (length_str == null) break;
@@ -138,7 +138,7 @@ public class TcpClientHandler
 
         if (found && peer?.Stream != null && peer.IsConnected == true)
         {
-            StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
+            using var stream = new StreamWriter(peer.Stream, leaveOpen: true);
             string serialized_msg = JsonSerializer.Serialize(msg);
             string total_msg = serialized_msg.Length.ToString() + '\n'+ serialized_msg;
             await stream.WriteAsync(total_msg); // this also needs to be await, but gives "Cannot await 'void'" error
