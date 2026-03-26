@@ -10,26 +10,31 @@
 - Sophie Duquette       - Security/KeyExchange.cs
 
 **Date:** [Submission Date]
-
+3/26/2026
 ---
 
 ## Build & Run Instructions
-
-[Update from Sprint 1 if needed, or reference Sprint 1 documentation]
-
+```
+dotnet build
+dotnet run
+```
 ---
 
 ## Security Protocol Overview
+We utilize a Diffe-Hellman secure key distrabution to ensure that each client connects safely.
 
 ### Encryption Protocol
+We utilize RSA key exchange with AES data encryption.
 
 #### Key Exchange Process
-[Describe step-by-step how keys are exchanged when two peers connect]
 
-1. [Step 1]
-2. [Step 2]
-3. [Step 3]
-4. ...
+1. Client 1 connects to Client 2
+2. Client 1 sends their RSA public key
+3. Client 2 sends their RSA public key
+4. Client 1 genreate AES session key
+5. Client 1 encrypts AES key with Client 2's public key and sends it 
+6. Both clients now have shared AES key
+7. All subsequent messages are now encrypted with AES!
 
 #### Message Encryption
 [Describe how messages are encrypted before sending]
@@ -39,10 +44,10 @@
 - **IV Generation:** [How IVs are generated]
 
 #### Message Signing
-[Describe how messages are signed and verified]
+Messages are signed using the clients corresponding private RSA instance. The message is then verifies with the senders public key 
 
-- **Algorithm:** [e.g., RSA with SHA-256]
-- **Key Size:** [e.g., 2048 bits]
+- **Algorithm:** SHA-256
+- **Key Size:** 2048 bits
 
 ---
 
