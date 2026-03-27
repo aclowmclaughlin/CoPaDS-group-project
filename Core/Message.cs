@@ -14,6 +14,7 @@ public enum MessageType
     RoomChat,
 
     // Server commands
+    RegisterClient,
     ListPeers,
     ListRooms,
     ListPeersInRoom,

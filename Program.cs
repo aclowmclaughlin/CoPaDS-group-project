@@ -185,13 +185,13 @@ class Program
                         bool connected = await tcpClientHandler.ConnectAsync(resulty.Args[1], port);
                         if (connected)
                         {
-                            Console.WriteLine($"Connected to peer {peery}");
-                            Console.WriteLine($"This terminal is: {localUserName}");
+                            // Console.WriteLine($"Connected to peer {peery}");
+                            // Console.WriteLine($"This terminal is: {localUserName}");
 
                             // Register this client's logical name with the server immediately to show up in /list
                             clientMessageQueue!.EnqueueOutgoing(new Message
                             {
-                                Type = MessageType.ListPeers,
+                                Type = MessageType.RegisterClient,
                                 Sender = localUserName
                             });
                         }
@@ -353,7 +353,7 @@ class Program
         if(!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
         {
             peer.Name = message.Sender;
-            Console.WriteLine($"[server] Registered client name {peer.Name} for socket {peer.Id}");
+            // Console.WriteLine($"[server] Registered client name {peer.Name} for socket {peer.Id}");
         }
 
         // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE
@@ -374,8 +374,30 @@ class Program
                     break;
                 }
 
+                Message forwardedMessage = new Message
+                {
+                    Id = message.Id,
+                    Type = message.Type,
+                    Sender = message.Sender,
+                    TargetPeerID = message.TargetPeerID,
+                    Room = message.Room,
+                    Content = message.Content,
+                    EncryptedContent = message.EncryptedContent,
+                    Signature = message.Signature,
+                    PublicKey = message.PublicKey,
+                    EncryptedSessionKey = message.EncryptedSessionKey,
+                    Timestamp = message.Timestamp
+                };
+
+                // Attach public key to message
+                if ((message.Type == MessageType.Chat || message.Type == MessageType.RoomChat) && peer.PublicKey != null)
+                {
+                    forwardedMessage.PublicKey = peer.PublicKey;
+                    Console.WriteLine($"[server] Attached long-term public key for {message.Sender} to {message.Type}");
+                }
+
                 Console.WriteLine($"[server] ROUTE {message.Type} from {message.Sender} -> {forwardingName}");
-                serverMessageQueue!.EnqueueOutgoing(message);
+                serverMessageQueue!.EnqueueOutgoing(forwardedMessage);
                 break;
             }
             // server commands!
@@ -526,7 +548,7 @@ class Program
 
     private static void HandleClientPeerConnected(Peer peer)
     {
-        Console.WriteLine($"Connected to Server at {peer.Address}, {peer.Port}");
+        Console.WriteLine($"Connected to server at {peer.Address}, {peer.Port}");
     }
 
     private static void HandleClientMessageReceived(Peer peer, Message message)
@@ -573,7 +595,7 @@ class Program
                 }
             case MessageType.ListPeersReply:
                 {
-                    Console.WriteLine($"[client] Received ListPeersReply: '{message.Content}'");
+                    // Console.WriteLine($"[client] Received ListPeersReply: '{message.Content}'");
 
                     string[] peer_names = message.Content
                         .Split(",", StringSplitOptions.RemoveEmptyEntries);
@@ -790,6 +812,16 @@ class Program
         if(!sentToAnyone)
             return $"No other peers are in {room_name}.";
 
+        // Local echo sent message
+        clientMessageQueue!.EnqueueIncoming(new Message
+        {
+            Type = MessageType.RoomChat,
+            Sender = localUserName,
+            Room = room_name,
+            Content = message,
+            Timestamp = DateTime.Now
+        });
+
         return null;
     }
 
@@ -967,6 +999,11 @@ class Program
             serverMessageQueue!.EnqueueIncoming(message);
             serverMessageQueue!.EnqueueOutgoing(message);
             return;
+        }
+
+        if (message.PublicKey != null && !string.IsNullOrWhiteSpace(message.Sender))
+        {
+            peerPublicKeys[message.Sender] = message.PublicKey;
         }
 
         if (TryDecryptAndVerify(message.Sender, message, out Message? decryptedMessage) && decryptedMessage != null)
