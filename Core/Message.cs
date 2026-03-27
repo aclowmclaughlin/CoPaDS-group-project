@@ -7,21 +7,25 @@ namespace SecureMessenger.Core;
 // client messages should just be forwared by the server.
 public enum MessageType
 {
-    // client messages
+    // End-to-end client messages
     Chat,
     PublicKey,
     SessionKey,
     RoomChat,
 
-    // server messages (and replies)
+    // Server commands
     ListPeers,
-    ListPeersReply,
     ListRooms,
-    ListRoomsReply,
     ListPeersInRoom,
-    ListPeersInRoomReply,
-    LeaveRoom,
     CreateRoom,
+    JoinRoom,
+    LeaveRoom,
+
+    // Server replies
+    ListPeersReply,
+    ListRoomsReply,
+    ListPeersInRoomReply,
+    ServerNotice
 }
 
 /// <summary>

@@ -95,7 +95,7 @@ public class TcpServer
     /// <summary>
     /// Handle a new incoming connection by creating a Peer and starting its receive thread.
     /// </summary>
-    private void HandleNewConnection(TcpClient client)
+    private async void HandleNewConnection(TcpClient client)
     {
         // Create a new Peer object with:
         // - Client = the TcpClient
@@ -110,11 +110,15 @@ public class TcpServer
             Port = ((IPEndPoint)client.Client.RemoteEndPoint!).Port,
             IsConnected = true
         };
-        byte[] peer_public_key = new byte[2048];
-        peer.Stream.ReadExactlyAsync(peer_public_key, 0, 2048);
-        peer.PublicKey = peer_public_key;
 
-        
+        byte[] keyLengthBytes = new byte[4];
+        await peer.Stream!.ReadExactlyAsync(keyLengthBytes, 0, 4);
+
+        int keyLength = BitConverter.ToInt32(keyLengthBytes, 0);
+        byte[] peerPublicKey = new byte[keyLength];
+        await peer.Stream.ReadExactlyAsync(peerPublicKey, 0, keyLength);
+
+        peer.PublicKey = peerPublicKey;
 
         // Add the peer to _connectedPeers (with proper locking)
         lock(_connectedPeers)
@@ -172,6 +176,9 @@ public class TcpServer
                     Console.WriteLine("Received Message but couldn't deserialize ;-;");
                     continue;
                 }
+
+                if (!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
+                    peer.Name = message.Sender;
 
                 OnMessageReceived?.Invoke(peer, message);
             }
@@ -239,6 +246,13 @@ public class TcpServer
             _connectedPeers.Remove(peer);
         }
 
+        // Remove the peer from all rooms
+        lock (_rooms_lock)
+        {
+            foreach (var roomEntry in _rooms)
+                roomEntry.Value.Remove(peer);
+        }
+
         // Invoke OnPeerDisconnected event
         OnPeerDisconnected?.Invoke(peer);
     }
@@ -289,15 +303,23 @@ public class TcpServer
         }
     }
 
+    public Peer? GetPeerByName(string name)
+    {
+        lock(_connectedPeers)
+        {
+            return _connectedPeers.FirstOrDefault(peer => peer.IsConnected && peer.Name == name);
+        }
+    }
+
     public List<Peer>? GetPeersInRoom(string room_name)
     {
-        List<Peer>? peersInRoom = null;
         lock(_rooms_lock)
         {
-            bool room_exists = _rooms.TryGetValue(room_name, out peersInRoom);
-            // returns null if no peers in room.
+            if(_rooms.TryGetValue(room_name, out var peersInRoom))
+                return peersInRoom.ToList();
         }
-        return peersInRoom;
+
+        return null; // Returns null if no peers in room
     }
 
     public bool CreateRoom(string room_name)
@@ -319,11 +341,13 @@ public class TcpServer
         lock(_rooms_lock)
         {
             List<Peer>? currentPeersInRoom;
-            if(_rooms.TryGetValue(room_name, out currentPeersInRoom)) return false;
-            if (currentPeersInRoom!.Contains(peer)) 
-            {
+
+            if(!_rooms.TryGetValue(room_name, out currentPeersInRoom))
+                return false;
+
+            if(currentPeersInRoom!.Contains(peer))
                 return true;
-            }
+
             currentPeersInRoom.Add(peer);
             _rooms[room_name] = currentPeersInRoom;
         }
@@ -337,9 +361,11 @@ public class TcpServer
         lock(_rooms_lock)
         {
             List<Peer>? currentPeersInRoom;
-            if(_rooms.TryGetValue(room_name, out currentPeersInRoom)) return false;
+            if(!_rooms.TryGetValue(room_name, out currentPeersInRoom))
+                return false;
+
             // remove from room
-            if (currentPeersInRoom!.Contains(peer)) 
+            if(currentPeersInRoom!.Contains(peer)) 
             {
                 currentPeersInRoom.Remove(peer);
                 _rooms[room_name] = currentPeersInRoom;

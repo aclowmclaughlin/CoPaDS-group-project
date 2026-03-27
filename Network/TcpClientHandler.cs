@@ -53,7 +53,12 @@ public class TcpClientHandler
                 IsConnected = true
             };
 
-            await peer.Stream.WriteAsync(rsa_encryption.ExportPublicKey());
+            byte[] publicKey = rsa_encryption.ExportPublicKey();
+            byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
+
+            await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+            await peer.Stream.WriteAsync(publicKey, 0, publicKey.Length);
+            await peer.Stream.FlushAsync();
 
             lock(_lock) { _connections[peer.Id] = peer; };
 
