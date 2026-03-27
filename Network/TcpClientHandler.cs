@@ -2,13 +2,11 @@
 // CSCI 251 - Secure Distributed Messenger
 // check MessageQueue, TcpServer
 
-
-using System.Data;
-using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using SecureMessenger.Core;
+using SecureMessenger.Security;
 
 namespace SecureMessenger.Network;
 
@@ -18,6 +16,8 @@ namespace SecureMessenger.Network;
 public class TcpClientHandler
 {
     private readonly Dictionary<string, Peer> _connections = new();
+
+    public readonly RsaEncryption rsa_encryption = new();
     private readonly object _lock = new();
 
     public event Action<Peer>? OnConnected;
@@ -49,6 +49,13 @@ public class TcpClientHandler
                 IsConnected = true
             };
 
+            byte[] publicKey = rsa_encryption.ExportPublicKey();
+            byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
+
+            await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+            await peer.Stream.WriteAsync(publicKey, 0, publicKey.Length);
+            await peer.Stream.FlushAsync();
+
             lock(_lock) { _connections[peer.Id] = peer; };
 
             OnConnected?.Invoke(peer);
@@ -72,7 +79,12 @@ public class TcpClientHandler
     {
         try
         {
-            StreamReader? stream = new StreamReader(peer.Stream); // possible null, fix later
+            if(peer.Stream == null)
+            {
+                Console.WriteLine($"Peer {peer.Id} has no stream.");
+                return;
+            }
+            using var stream = new StreamReader(peer.Stream);
             while (peer.IsConnected) {
                 var length_str = await stream.ReadLineAsync(); // need to wait until input
                 if (length_str == null) break;
@@ -95,9 +107,17 @@ public class TcpClientHandler
                 {
                     // deserialization failed, cry or smthn.
                     Console.WriteLine("Received Message but couldn't deserialize ;-;");
+                    continue;
                 }
 
-                OnMessageReceived?.Invoke(peer, message);
+                try
+                {
+                    OnMessageReceived?.Invoke(peer, message);
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"Rejected erroneous message from peer {peer.Id}: {exception.Message}");
+                }
             }
         
         }
@@ -132,30 +152,12 @@ public class TcpClientHandler
 
         if (found && peer?.Stream != null && peer.IsConnected == true)
         {
-            StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
+            using var stream = new StreamWriter(peer.Stream, leaveOpen: true);
             string serialized_msg = JsonSerializer.Serialize(msg);
             string total_msg = serialized_msg.Length.ToString() + '\n'+ serialized_msg;
             await stream.WriteAsync(total_msg); // this also needs to be await, but gives "Cannot await 'void'" error
             await stream.FlushAsync();
         }
-    }
-
-    /// <summary>
-    /// Broadcast a message to all connected peers.
-    /// </summary>
-    public async Task BroadcastAsync(Message msg)
-    {
-        List<Peer> allPeers;
-        lock (_lock)
-        {
-            allPeers = _connections.Values.ToList();
-        }
-
-        foreach (Peer p in allPeers)
-        {
-            await SendAsync(p.Id, msg);
-        }
-        
     }
 
     /// <summary>

@@ -19,6 +19,9 @@ public class TcpServer
     private CancellationTokenSource? _cancellationTokenSource;
     private Thread? _listenThread;
 
+    private readonly Dictionary<string, List<Peer>> _rooms = new();
+    private object _rooms_lock = new();
+
     public event Action<Peer>? OnPeerConnected;
     public event Action<Peer>? OnPeerDisconnected;
     public event Action<Peer, Message>? OnMessageReceived;
@@ -91,7 +94,7 @@ public class TcpServer
     /// <summary>
     /// Handle a new incoming connection by creating a Peer and starting its receive thread.
     /// </summary>
-    private void HandleNewConnection(TcpClient client)
+    private async void HandleNewConnection(TcpClient client)
     {
         // Create a new Peer object with:
         // - Client = the TcpClient
@@ -106,6 +109,16 @@ public class TcpServer
             Port = ((IPEndPoint)client.Client.RemoteEndPoint!).Port,
             IsConnected = true
         };
+
+        byte[] keyLengthBytes = new byte[4];
+        await peer.Stream!.ReadExactlyAsync(keyLengthBytes, 0, 4);
+
+        int keyLength = BitConverter.ToInt32(keyLengthBytes, 0);
+        byte[] peerPublicKey = new byte[keyLength];
+        await peer.Stream.ReadExactlyAsync(peerPublicKey, 0, keyLength);
+
+        peer.PublicKey = peerPublicKey;
+        Console.WriteLine($"[server] Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
 
         // Add the peer to _connectedPeers (with proper locking)
         lock(_connectedPeers)
@@ -128,8 +141,14 @@ public class TcpServer
     {
         try
         {
+            if (peer.Stream == null)
+            {
+                Console.WriteLine($"Peer {peer.Id} has no stream.");
+                return;
+            }
+
             // Create a StreamReader from the peer's stream
-            using var reader = new StreamReader(peer.Stream!);
+            using var reader = new StreamReader(peer.Stream);
 
             // Loop while peer is connected and cancellation not requested
             while(peer.IsConnected && !_cancellationTokenSource!.Token.IsCancellationRequested)
@@ -155,7 +174,11 @@ public class TcpServer
                 {
                     // deserialization failed, cry or smthn.
                     Console.WriteLine("Received Message but couldn't deserialize ;-;");
+                    continue;
                 }
+
+                if (!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
+                    peer.Name = message.Sender;
 
                 OnMessageReceived?.Invoke(peer, message);
             }
@@ -170,25 +193,39 @@ public class TcpServer
         }
     }
 
+    // /// <summary>
+    // /// Broadcast a message to all connected peers.
+    // /// </summary>
+    // public async Task BroadcastAsync(Message msg)
+    // {
+    //     List<Peer> allPeers;
+    //     lock (_connectedPeers)
+    //     {
+    //         allPeers = _connectedPeers.ToList();
+    //     }
+
+    //     foreach (Peer peer in allPeers)
+    //     {
+    //         await SendToPeerAsync(peer, msg);
+    //     }
+    // }
+
     /// <summary>
-    /// Broadcast a message to all connected peers.
+    /// Send a message to specific peer
     /// </summary>
-    public async Task BroadcastAsync(Message msg)
+    public async Task SendToPeerAsync(Peer peer, Message msg)
     {
-        List<Peer> allPeers;
-        lock (_connectedPeers)
+        if (peer.Stream == null || !peer.IsConnected)
         {
-            allPeers = _connectedPeers;
+            return;
         }
 
-        foreach (Peer peer in allPeers)
-        {
-            StreamWriter stream = new StreamWriter(peer.Stream, leaveOpen: true);
-            string serialized_msg = JsonSerializer.Serialize(msg);
-            string total_msg = serialized_msg.Length.ToString() + '\n'+ serialized_msg;
-            await stream.WriteAsync(total_msg); // this also needs to be await, but gives "Cannot await 'void'" error
-            await stream.FlushAsync();
-        }
+        using var writer = new StreamWriter(peer.Stream, leaveOpen: true);
+        string serializedMessage = JsonSerializer.Serialize(msg);
+        string total_msg = serializedMessage.Length + "\n" + serializedMessage;
+
+        await writer.WriteAsync(total_msg);
+        await writer.FlushAsync();
     }
 
 
@@ -207,6 +244,13 @@ public class TcpServer
         lock(_connectedPeers)
         {
             _connectedPeers.Remove(peer);
+        }
+
+        // Remove the peer from all rooms
+        lock (_rooms_lock)
+        {
+            foreach (var roomEntry in _rooms)
+                roomEntry.Value.Remove(peer);
         }
 
         // Invoke OnPeerDisconnected event
@@ -250,4 +294,96 @@ public class TcpServer
             return _connectedPeers.ToList();
         }
     }
+
+    public IEnumerable<string> ListRooms()
+    {
+        lock(_rooms_lock)
+        {
+            return _rooms.Keys;
+        }
+    }
+
+    public IEnumerable<string> GetRoomsForPeer(Peer peer)
+    {
+        lock (_rooms_lock)
+        {
+            return _rooms
+                .Where(roomEntry => roomEntry.Value.Contains(peer))
+                .Select(roomEntry => roomEntry.Key)
+                .ToList();
+        }
+    }
+
+    public Peer? GetPeerByName(string name)
+    {
+        lock(_connectedPeers)
+        {
+            return _connectedPeers.FirstOrDefault(peer => peer.IsConnected && peer.Name == name);
+        }
+    }
+
+    public List<Peer>? GetPeersInRoom(string room_name)
+    {
+        lock(_rooms_lock)
+        {
+            if(_rooms.TryGetValue(room_name, out var peersInRoom))
+                return peersInRoom.ToList();
+        }
+
+        return null; // Returns null if no peers in room
+    }
+
+    public bool CreateRoom(string room_name)
+    {
+        // returns true if the room existed already, 
+        // false if the room did not exist (and was thus added)
+        lock(_rooms_lock)
+        {
+            if(_rooms.TryGetValue(room_name, out _)) return true;
+            _rooms.Add(room_name, new List<Peer>());
+        }
+        return false;
+    }
+
+    public bool AddToRoom(string room_name, Peer peer)
+    {
+        // returns false if the room doesn't exist,
+        // true if the room was updated with the peer (or already had the peer)
+        lock(_rooms_lock)
+        {
+            List<Peer>? currentPeersInRoom;
+
+            if(!_rooms.TryGetValue(room_name, out currentPeersInRoom))
+                return false;
+
+            if(currentPeersInRoom!.Contains(peer))
+                return true;
+
+            currentPeersInRoom.Add(peer);
+            _rooms[room_name] = currentPeersInRoom;
+        }
+        return true;
+    }
+
+    public bool RemoveFromRoom(string room_name, Peer peer)
+    {
+        // returns false if the room doesn't exist,
+        // true if the peer was removed (or didn't exist in the room)
+        lock(_rooms_lock)
+        {
+            List<Peer>? currentPeersInRoom;
+            if(!_rooms.TryGetValue(room_name, out currentPeersInRoom))
+                return false;
+
+            // remove from room
+            if(currentPeersInRoom!.Contains(peer)) 
+            {
+                currentPeersInRoom.Remove(peer);
+                _rooms[room_name] = currentPeersInRoom;
+                return true;
+            }
+        }
+        return true;
+    }
+
 }

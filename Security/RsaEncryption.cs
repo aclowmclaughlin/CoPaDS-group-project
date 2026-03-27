@@ -25,6 +25,8 @@ public class RsaEncryption
 {
     private readonly RSA _rsa;
 
+    public RSA Rsa => _rsa; // Expose _rsa for MessageSigner use
+
     /// <summary>
     /// Create a new RSA key pair.
     /// </summary>
