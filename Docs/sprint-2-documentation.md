@@ -9,40 +9,57 @@
 - Nicholas Merante      - Security/MessageSigner.cs
 - Sophie Duquette       - Security/KeyExchange.cs
 
-**Date:** [Submission Date]
+**Date:** March 27, 2026
 
+**Github**
+https://github.com/aclowmclaughlin/CoPaDS-group-project
 ---
 
 ## Build & Run Instructions
+Build and run instructions are same as Sprint 1, which are as follows.
 
-[Update from Sprint 1 if needed, or reference Sprint 1 documentation]
+### Prerequisites
+- .NET SDK version
+
+### Building the Project
+```
+dotnet build
+```
 
 ---
+
+## Run Instructions
+
+### Starting the Application
+```
+dotnet run 
+```
 
 ## Security Protocol Overview
 
 ### Encryption Protocol
 
 #### Key Exchange Process
-[Describe step-by-step how keys are exchanged when two peers connect]
+Given two clients/peers:
 
-1. [Step 1]
-2. [Step 2]
-3. [Step 3]
-4. ...
+1. A sends B the public key
+2. B generates AES key, and sends it to A
+3. A then decrypts the AES key
+4. Both A and B then store the AES key for the encryption
 
 #### Message Encryption
-[Describe how messages are encrypted before sending]
+The plaintext messages are first encrypted using the shared AES key. This is then signed by the using the sender's private key before being sent to the recipient, which is sent alongside the client's signature.
 
-- **Algorithm:** [e.g., AES-256-CBC]
-- **Key Size:** [e.g., 256 bits]
-- **IV Generation:** [How IVs are generated]
+- **Algorithm:** AES-256-CBC
+- **Key Size:** 32 bytes
+- **IV Generation:** randomly generated (16-bytes) for each message and inserted at the start of the encrypted message
 
 #### Message Signing
 [Describe how messages are signed and verified]
+The encrypted message and the IV are being signed, which is then verified using the signature once the ciphered message is sent to the recipient. The message is decrypted only on successful verification, otherwise the ciphertext is not evaluated.
 
-- **Algorithm:** [e.g., RSA with SHA-256]
-- **Key Size:** [e.g., 2048 bits]
+- **Algorithm:** RSA with OEAPSHA-256
+- **Key Size:** 2048 bits
 
 ---
 
@@ -50,12 +67,10 @@
 
 ### Key Generation
 [Describe when and how keys are generated]
-
-- **RSA Key Pair:** [When generated, how stored]
-- **AES Session Key:** [When generated, lifetime]
+When a `keyExchange` object is created, a RSA key pair is generated with a public and private key for each peer. A session key is also created, which is given to any peers with that RSA public key.
 
 ### Key Storage
-[Describe how keys are stored during runtime]
+During runtime, RSA keys are stored in the `_rsa` variable, and the AES session key is stored as a byte array in `_sessionKey`. 
 
 ### Key Lifetime
 | Key Type | Generated When | Expires When |
@@ -80,14 +95,16 @@
 | 0x02 | SESSION_KEY | Encrypted AES session key |
 | 0x03 | MESSAGE | Encrypted chat message |
 | 0x04 | SIGNED_MESSAGE | Signed and encrypted message |
-| | | |
 
 ---
 
 ## Threat Model
 
 ### Assets Protected
-- [What are you protecting? e.g., message content, user identity]
+- message content is AES encrypted
+- integrity since messages are signed
+- session keys are RSA encrypted
+
 
 ### Threats Addressed
 | Threat | Mitigation |
@@ -95,24 +112,25 @@
 | Eavesdropping | AES encryption of all messages |
 | Man-in-the-middle | [Your mitigation] |
 | Message tampering | Digital signatures |
-| Replay attacks | [Your mitigation, if any] |
+| Replay attacks | no current mitigation |
 | | |
 
 ### Known Limitations
-[What threats are NOT addressed by your implementation?]
+- metadata is not encrypted
+- checking integrity for public keys
 
 ---
 
 ## Features Implemented
 
-- [ ] AES encryption of messages
-- [ ] RSA key pair generation
-- [ ] RSA key exchange
-- [ ] AES session key exchange (encrypted with RSA)
-- [ ] Message signing
-- [ ] Signature verification
-- [ ] Multiple simultaneous conversations
-- [ ] Per-conversation encryption keys
+- [X] AES encryption of messages
+- [X] RSA key pair generation
+- [X] RSA key exchange
+- [X] AES session key exchange (encrypted with RSA)
+- [X] Message signing
+- [X] Signature verification
+- [X] Multiple simultaneous conversations
+- [X] Per-conversation encryption keys
 
 ---
 

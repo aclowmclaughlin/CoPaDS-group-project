@@ -15,7 +15,7 @@ public class Peer
     public string Name { get; set; } = string.Empty;
     public IPAddress? Address { get; set; }
     public int Port { get; set; }
-    public DateTime LastSeen { get; set; } = DateTime.Now;
+    // public DateTime LastSeen { get; set; } = DateTime.Now;
     public bool IsConnected { get; set; }
 
     // Network connection
@@ -23,7 +23,7 @@ public class Peer
     public NetworkStream? Stream { get; set; }
 
     // Sprint 2: Per-session encryption keys
-    public byte[]? AesKey { get; set; }
+    // public byte[]? AesKey { get; set; }
     public byte[]? PublicKey { get; set; }
 
     public override string ToString()
