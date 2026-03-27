@@ -2,12 +2,8 @@
 // CSCI 251 - Secure Distributed Messenger
 // check MessageQueue, TcpServer
 
-
-using System.Data;
-using System.Linq.Expressions;
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices.Swift;
 using System.Text.Json;
 using SecureMessenger.Core;
 using SecureMessenger.Security;
@@ -53,7 +49,12 @@ public class TcpClientHandler
                 IsConnected = true
             };
 
-            await peer.Stream.WriteAsync(rsa_encryption.ExportPublicKey());
+            byte[] publicKey = rsa_encryption.ExportPublicKey();
+            byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
+
+            await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+            await peer.Stream.WriteAsync(publicKey, 0, publicKey.Length);
+            await peer.Stream.FlushAsync();
 
             lock(_lock) { _connections[peer.Id] = peer; };
 
@@ -109,7 +110,14 @@ public class TcpClientHandler
                     continue;
                 }
 
-                OnMessageReceived?.Invoke(peer, message);
+                try
+                {
+                    OnMessageReceived?.Invoke(peer, message);
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"Rejected erroneous message from peer {peer.Id}: {exception.Message}");
+                }
             }
         
         }
@@ -150,24 +158,6 @@ public class TcpClientHandler
             await stream.WriteAsync(total_msg); // this also needs to be await, but gives "Cannot await 'void'" error
             await stream.FlushAsync();
         }
-    }
-
-    /// <summary>
-    /// Broadcast a message to all connected peers.
-    /// </summary>
-    public async Task BroadcastAsync(Message msg)
-    {
-        List<Peer> allPeers;
-        lock (_lock)
-        {
-            allPeers = _connections.Values.ToList();
-        }
-
-        foreach (Peer p in allPeers)
-        {
-            await SendAsync(p.Id, msg);
-        }
-        
     }
 
     /// <summary>
