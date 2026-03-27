@@ -1,7 +1,6 @@
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
-using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
@@ -194,22 +193,22 @@ public class TcpServer
         }
     }
 
-    /// <summary>
-    /// Broadcast a message to all connected peers.
-    /// </summary>
-    public async Task BroadcastAsync(Message msg)
-    {
-        List<Peer> allPeers;
-        lock (_connectedPeers)
-        {
-            allPeers = _connectedPeers.ToList();
-        }
+    // /// <summary>
+    // /// Broadcast a message to all connected peers.
+    // /// </summary>
+    // public async Task BroadcastAsync(Message msg)
+    // {
+    //     List<Peer> allPeers;
+    //     lock (_connectedPeers)
+    //     {
+    //         allPeers = _connectedPeers.ToList();
+    //     }
 
-        foreach (Peer peer in allPeers)
-        {
-            await SendToPeerAsync(peer, msg);
-        }
-    }
+    //     foreach (Peer peer in allPeers)
+    //     {
+    //         await SendToPeerAsync(peer, msg);
+    //     }
+    // }
 
     /// <summary>
     /// Send a message to specific peer

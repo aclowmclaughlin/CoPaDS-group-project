@@ -3,14 +3,7 @@
 // Group Project
 
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using System.Globalization;
 using System.Net;
-using System.Net.NetworkInformation;
-using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.Json.Serialization;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.Security;
@@ -84,13 +77,7 @@ class Program
 
     private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
 
-    // lowkey idk if we need these since we're mostly modifying concurrent dicts
-    private static readonly object _peerEncryptionLock = new();
-
-    private static readonly object _peerKeyExchangeLock = new();
-
-    public static int peery = 0;
-
+    private static bool tamperNextEncryptedMessage = false;
 
     static async Task Main(string[] args)
     {
@@ -132,12 +119,12 @@ class Program
         // 1. Start a thread/task for processing incoming messages
         // 2. Start a thread/task for sending outgoing messages
         // Note: TcpServer.Start() will create its own listen thread
-        List<Task> tasklist = new List<Task>();
-        
-        tasklist.Add(Task.Run(ProcessClientIncomingMessages));  // pcim
-        tasklist.Add(Task.Run(SendClientOutgoingMessages));     // scom
-        tasklist.Add(Task.Run(ProcessServerIncomingMessages));  // psim
-        tasklist.Add(Task.Run(SendServerOutgoingMessages));     // ssom
+        List<Task> tasklist =
+        [
+            Task.Run(ProcessClientIncomingMessages),  // pcim
+            Task.Run(SendClientOutgoingMessages),     // scom
+            Task.Run(SendServerOutgoingMessages),     // ssom
+        ];
 
 
         Console.WriteLine("Type /help for available commands");
@@ -145,7 +132,7 @@ class Program
 
         // Main loop - handle user input
         bool running = true;
-        while (running)
+        while(running)
         {
             // TODO: Implement the main input loop
             // 1. Read a line from the console                      X
@@ -162,28 +149,26 @@ class Program
 
 
             var input = Console.ReadLine();
-            if (string.IsNullOrEmpty(input)) continue;
+            if(string.IsNullOrEmpty(input)) continue;
 
-            if (consoleUI == null || tcpClientHandler == null || tcpServer == null)
+            if(consoleUI == null || tcpClientHandler == null || tcpServer == null)
             {
                 Console.WriteLine("Application components are not initialized.");
                 return;
             }
 
             var resulty = consoleUI.ParseCommand(input);
-            switch (resulty.CommandType)
+            switch(resulty.CommandType)
             {
                 case CommandType.Quit:
                     running = false;
                     Console.WriteLine("Quitting program ;)");
                     break;
                 case CommandType.Connect:
-                    if (resulty.Args != null && resulty.Args.Length >= 3 && int.TryParse(resulty.Args[2], out int port))
+                    if(resulty.Args != null && resulty.Args.Length >= 3 && int.TryParse(resulty.Args[2], out int port))
                     {
-                        peery = port;
-
                         bool connected = await tcpClientHandler.ConnectAsync(resulty.Args[1], port);
-                        if (connected)
+                        if(connected)
                         {
                             // Console.WriteLine($"Connected to peer {peery}");
                             // Console.WriteLine($"This terminal is: {localUserName}");
@@ -197,7 +182,7 @@ class Program
                         }
                         else
                         {
-                            Console.WriteLine($"Couldn't connect to peer {peery}" + " :( ");  //This now checks if the port can happen and if not exits nicely
+                            Console.WriteLine($"Couldn't connect to server at {resulty.Args[1]}:{port}"); // This now checks if the port can happen and if not exits nicely
                         }
                     }
                     else
@@ -206,7 +191,7 @@ class Program
                     }
                     break;
                 case CommandType.Listen:
-                    if (resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[1], out int listenPort))
+                    if(resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[1], out int listenPort))
                     {
                         Console.WriteLine("Starting TCP Server");
                         tcpServer.Start(listenPort);
@@ -233,7 +218,7 @@ class Program
                 // Room commands
                 case CommandType.CreateRoom:
                     // make sure arguments are valid
-                    if (resulty.Args == null 
+                    if(resulty.Args == null 
                         || resulty.Args.Length < 2 
                         || !resulty.Args[1].StartsWith('#'))
                     {
@@ -251,7 +236,7 @@ class Program
                     }
                     break;
                 case CommandType.JoinRoom:
-                    if (resulty.Args == null 
+                    if(resulty.Args == null 
                         || resulty.Args.Length < 2 
                         || !resulty.Args[1].StartsWith('#'))
                     {
@@ -270,7 +255,7 @@ class Program
                     }
                     break;
                 case CommandType.LeaveRoom:
-                    if (resulty.Args == null 
+                    if(resulty.Args == null 
                         || resulty.Args.Length < 2 
                         || !resulty.Args[1].StartsWith('#'))
                     {
@@ -296,7 +281,7 @@ class Program
                     });
                     break;
                 case CommandType.MessageRoom:
-                    if (resulty.Args == null 
+                    if(resulty.Args == null 
                         || resulty.Args.Length < 3
                         || !resulty.Args[1].StartsWith('#'))
                     {
@@ -308,7 +293,7 @@ class Program
                         string message = string.Join(" ", resulty.Args.Skip(2)); // Send all words after room number arg
                         var error = await SendMessageToRoom(room_name, message);
 
-                        if (error != null)
+                        if(error != null)
                             Console.WriteLine(error);
                     }
                     break;
@@ -316,16 +301,33 @@ class Program
                     Console.WriteLine("Disconnecting all client connections");
                     tcpClientHandler?.DisconnectAll();
                     break;
-                    
+                case CommandType.Tamper:
+                    {
+                        if(resulty.Args == null || resulty.Args.Length < 2)
+                        {
+                            Console.WriteLine("Usage: /tamper on|off");
+                        }
+                        else if(resulty.Args[1].Equals("on", StringComparison.OrdinalIgnoreCase))
+                        {
+                            tamperNextEncryptedMessage = true;
+                            Console.WriteLine("[demo] Tampering enabled for the next encrypted message");
+                        }
+                        else if(resulty.Args[1].Equals("off", StringComparison.OrdinalIgnoreCase))
+                        {
+                            tamperNextEncryptedMessage = false;
+                            Console.WriteLine("[demo] Tampering disabled");
+                        }
+                        else
+                        {
+                            Console.WriteLine("Usage: /tamper on|off");
+                        }
+                        break;
+                    }
                 case CommandType.Unknown:
                     Console.WriteLine(resulty.Message ?? "Unknown command. Use /help.");
                     break;
-
                 default:
-                    clientMessageQueue!.EnqueueOutgoing(
-                        new Message
-                        {Content = input, Sender = localUserName});
-                    
+                    Console.WriteLine("Use /msg #<room> message to send chat messages.");
                     break;
             }
         }
@@ -358,7 +360,7 @@ class Program
 
         // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE
         // OF THE SERVER MESSAGE QUEUE
-        switch (message.Type)
+        switch(message.Type)
         {
             case MessageType.RoomChat:
             case MessageType.PublicKey:
@@ -368,7 +370,7 @@ class Program
                 string forwardingName = message.TargetPeerID;
                 Peer? destPeer = tcpServer!.GetPeerByName(forwardingName);
 
-                if (destPeer == null)
+                if(destPeer == null)
                 {
                     Console.WriteLine($"[server] DROP {message.Type} from {message.Sender} -> {forwardingName}: destination not connected");
                     break;
@@ -389,8 +391,14 @@ class Program
                     Timestamp = message.Timestamp
                 };
 
+                if (message.Type == MessageType.Chat || message.Type == MessageType.RoomChat)
+                {
+                    Console.WriteLine($"[demo] Server forwarding encrypted chat from {message.Sender} to {message.TargetPeerID}");
+                    Console.WriteLine($"[demo] Server sees ciphertext bytes={message.EncryptedContent?.Length ?? 0}, plaintext field length={message.Content?.Length ?? 0}");
+                }
+
                 // Attach public key to message
-                if ((message.Type == MessageType.Chat || message.Type == MessageType.RoomChat) && peer.PublicKey != null)
+                if((message.Type == MessageType.Chat || message.Type == MessageType.RoomChat) && peer.PublicKey != null)
                 {
                     forwardedMessage.PublicKey = peer.PublicKey;
                     Console.WriteLine($"[server] Attached long-term public key for {message.Sender} to {message.Type}");
@@ -480,7 +488,7 @@ class Program
                     // peer_id:PublicKey,peer_id:PublicKey,...
                     string room_name = message.Room;
                     var peers_list = tcpServer!.GetPeersInRoom(room_name);
-                    if (peers_list == null)
+                    if(peers_list == null)
                     {
                         Message emptyRoomResponse = new Message
                         {
@@ -512,7 +520,7 @@ class Program
                         Sender = "SERVER",
                         TargetPeerID = peer.Name,
                         Room = room_name,
-                        Content = string.Join(",", peerEntries)
+                        Content = replyContent
                     };
 
                     serverMessageQueue!.EnqueueOutgoing(response_message);
@@ -555,7 +563,7 @@ class Program
     {
         //TODO fix this
         // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE OF THE CLIENT MESSAGE QUEUE
-        if (!string.IsNullOrWhiteSpace(message.TargetPeerID) && message.TargetPeerID != localUserName)
+        if(!string.IsNullOrWhiteSpace(message.TargetPeerID) && message.TargetPeerID != localUserName)
         {
             // This message was not for us!! Ignore it.
             return;
@@ -572,7 +580,7 @@ class Program
 
             case MessageType.RoomChat:
             case MessageType.Chat:
-                HandleEncryptedChatMessage(peer, message, false); //set to false for testing purposes
+                HandleEncryptedChatMessage(message);
                 break;
             
             case MessageType.ListRoomsReply:
@@ -660,48 +668,28 @@ class Program
         }
     }
 
-
-    private static Task ProcessServerIncomingMessages()
-    {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
-        {
-            try
-            {
-                var msg = serverMessageQueue!.DequeueIncoming(); //deque
-                if (msg != null)
-                {
-                    Console.WriteLine($"[server] Received {msg.Type} from {msg.Sender} (encrypted={msg.EncryptedContent != null}, bytes={msg.EncryptedContent?.Length ?? 0})");
-                    // consoleUI?.DisplayMessage(msg);
-                }
-            }
-            catch (InvalidOperationException) { break; }
-        }
-
-        return Task.CompletedTask;
-    }
-
     private static async Task SendServerOutgoingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested)
+        while(!cancellationTokenSource!.Token.IsCancellationRequested)
         {
             Message? msg;
             try
             {
                 msg = serverMessageQueue!.DequeueOutgoing();
             }
-            catch (InvalidOperationException)
+            catch(InvalidOperationException)
             {
                 break;
             }
 
-            if (msg == null || tcpServer == null)
+            if(msg == null || tcpServer == null)
                 continue;
 
-            if (string.IsNullOrWhiteSpace(msg.TargetPeerID))
+            if(string.IsNullOrWhiteSpace(msg.TargetPeerID))
                 continue;
 
             Peer? destinationPeer = tcpServer.GetPeerByName(msg.TargetPeerID);
-            if (destinationPeer == null)
+            if(destinationPeer == null)
             {
                 Console.WriteLine($"Unable to deliver message to {msg.TargetPeerID}");
                 continue;
@@ -714,17 +702,17 @@ class Program
 
     private static Task ProcessClientIncomingMessages()
     {
-        while (!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
+        while(!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
         {
             try
             {
                 var msg = clientMessageQueue!.DequeueIncoming(); //dequeue
-                if (msg != null)
+                if(msg != null)
                 {
                     consoleUI?.DisplayMessage(msg);
                 }
             }
-            catch (InvalidOperationException) { break; }
+            catch(InvalidOperationException) { break; }
         }
 
         return Task.CompletedTask;
@@ -739,7 +727,7 @@ class Program
             {
                 logicalMessage = clientMessageQueue!.DequeueOutgoing();
             }
-            catch (InvalidOperationException) { break; }
+            catch(InvalidOperationException) { break; }
 
             // Skip empty messages
             if(logicalMessage == null || tcpClientHandler == null)
@@ -801,11 +789,10 @@ class Program
 
             peerPublicKeys[otherClient] = publicKey;
 
-            bool connected = await CreateAESConnectionWithClient(otherClient);
-            if(!connected)
+            bool sent = await SendMessageToClient(otherClient, message, room_name);
+            if (!sent)
                 return $"Failed to establish secure session with {otherClient}.";
 
-            await SendMessageToClient(otherClient, message, room_name);
             sentToAnyone = true;
         }
 
@@ -828,11 +815,11 @@ class Program
     private static async Task<bool> SendMessageToClient(string client_name, string message, string room)
     {
         // check if we are already connected to the client (they exist in the connection dictionary)
-        if (!peerAesEncryptions.TryGetValue(client_name, out _))
+        if(!peerAesEncryptions.TryGetValue(client_name, out _))
         {
             // if we are not, connect to the client
             bool connected = await CreateAESConnectionWithClient(client_name);
-            if (!connected)
+            if(!connected)
             {
                 return false;
             }
@@ -880,25 +867,11 @@ class Program
         };
 
         clientMessageQueue!.EnqueueOutgoing(message);
-        Console.WriteLine($"Sent public key to {client_name}, waiting for AES key.");
+        Console.WriteLine($"[demo] Starting key exchange with {client_name}");
+        Console.WriteLine($"[demo] Sent RSA public key to {client_name}, waiting for encrypted AES session key");
 
         return await taskCompletion.Task;
     }
-
-    // private static async Task SendToPeerAsync(Peer peer, Message message)
-    // {
-    //     if(tcpClientHandler != null && tcpClientHandler.GetConnectedPeers().Any(p => p.Id == peer.Id))
-    //     {
-    //         await tcpClientHandler.SendAsync(peer.Id, message);
-    //         return;
-    //     }
-
-    //     if (tcpServer != null)
-    //     {
-    //         await tcpServer.SendToPeerAsync(peer, message);
-    //     }
-    // }
-
 
     /// <summary>
     /// Processes a received public key message, stores the peer's public key, 
@@ -938,7 +911,8 @@ class Program
         clientMessageQueue!.EnqueueOutgoing(sessionKeyMessage);
         keyExchange.Complete();
 
-        Console.WriteLine($"Created AES session for {remoteClient}");
+        Console.WriteLine($"[demo] Received RSA public key from {remoteClient}");
+        Console.WriteLine($"[demo] Created AES session for {remoteClient} and sent encrypted session key back");
     }
 
     /// <summary>
@@ -962,7 +936,7 @@ class Program
         {
             Console.WriteLine($"No key exchange state found for {remoteClient}");
 
-            if (pendingKeyExchanges.TryRemove(remoteClient, out var failedNoState))
+            if(pendingKeyExchanges.TryRemove(remoteClient, out var failedNoState))
                 failedNoState.TrySetResult(false);
 
             return;
@@ -974,39 +948,31 @@ class Program
         {
             Console.WriteLine($"Failed to establish session key for {remoteClient}");
 
-            if (pendingKeyExchanges.TryRemove(remoteClient, out var failed))
+            if(pendingKeyExchanges.TryRemove(remoteClient, out var failed))
                 failed.TrySetResult(false);
 
             return;
         }
 
         peerAesEncryptions[remoteClient] = new AesEncryption(keyExchange.SessionKey);
-        Console.WriteLine($"Session key established with {remoteClient}");
+        Console.WriteLine($"[demo] Received encrypted AES session key from {remoteClient}");
+        Console.WriteLine($"[demo] Session key established with {remoteClient}");
 
         if(pendingKeyExchanges.TryRemove(remoteClient, out var pending))
             pending.TrySetResult(true);
     }
 
     /// <summary>
-    /// Handles an encrypted chat message by relaying it when received on the server side or decrypting and verifying 
-    /// it when received on the client side.
+    /// Handles an encrypted chat message by decrypting and verifying it when received on the client side.
     /// </summary>
-    private static void HandleEncryptedChatMessage(Peer peer, Message message, bool isServerSide)
+    private static void HandleEncryptedChatMessage(Message message)
     {
-        //TODO fix this
-        if(isServerSide)
-        {
-            serverMessageQueue!.EnqueueIncoming(message);
-            serverMessageQueue!.EnqueueOutgoing(message);
-            return;
-        }
-
-        if (message.PublicKey != null && !string.IsNullOrWhiteSpace(message.Sender))
+        if(message.PublicKey != null && !string.IsNullOrWhiteSpace(message.Sender))
         {
             peerPublicKeys[message.Sender] = message.PublicKey;
         }
 
-        if (TryDecryptAndVerify(message.Sender, message, out Message? decryptedMessage) && decryptedMessage != null)
+        if(TryDecryptAndVerify(message.Sender, message, out Message? decryptedMessage) && decryptedMessage != null)
         {
             clientMessageQueue!.EnqueueIncoming(decryptedMessage);
         }
@@ -1018,23 +984,26 @@ class Program
     /// </summary>
     private static Message CreateEncryptedChatMessage(string client_name, Message logicalMessage)
     {
-        AesEncryption? aes;
-        KeyExchange? keyExchange;
-
-        // get aes encryptor
-        peerAesEncryptions.TryGetValue(client_name, out aes);
-        // get keyexchange
-        peerKeyExchanges.TryGetValue(client_name, out keyExchange);
-
-        if (keyExchange == null || aes == null)
+        if (!peerAesEncryptions.TryGetValue(client_name, out var aes))
         {
-            throw new InvalidOperationException($"No key exchange state/aes encryption found for peer {client_name}");
+            throw new InvalidOperationException($"No AES encryption found for peer {client_name}");
         }
 
         // Encrypt, sign, and return given message using peer's AES session key
         byte[] encryptedBytes = aes.Encrypt(logicalMessage.Content);
+
+        // Tamper with encrypted data if tamper is enabled
+        if (tamperNextEncryptedMessage && encryptedBytes.Length > 0)
+        {
+            encryptedBytes[encryptedBytes.Length - 1] ^= 0x01;
+            tamperNextEncryptedMessage = false;
+            Console.WriteLine($"[demo] Tampered with encrypted message destined for {client_name}");
+        }
+
+        Console.WriteLine($"[demo] Encrypting message for {client_name}: plaintext length={logicalMessage.Content.Length}, ciphertext bytes={encryptedBytes.Length}");
         var signer = new MessageSigner(tcpClientHandler!.rsa_encryption.Rsa); // Use RSA key to sign message
         byte[] signature = signer.SignData(encryptedBytes);
+        Console.WriteLine($"[demo] Signed encrypted message for {client_name}: signature bytes={signature.Length}");
 
         return new Message
         {
@@ -1065,7 +1034,7 @@ class Program
             return false;
         }
 
-        if (keyExchange == null)
+        if(keyExchange == null)
         {
             Console.WriteLine($"No key exchange state found for peer {client_name}");
             return false;
@@ -1074,18 +1043,19 @@ class Program
         byte[]? peer_public_key;
         peerPublicKeys.TryGetValue(client_name, out peer_public_key);
 
-        if (peer_public_key == null)
+        if(peer_public_key == null)
         {
             Console.WriteLine($"No Peer Public Key Found for peer {client_name}");
             return false;
         }
 
         bool valid = keyExchange.Signer.VerifyData(message.EncryptedContent, message.Signature, peer_public_key!);
-        if (!valid)
+        if(!valid)
         {
             Console.WriteLine("Signature verification failed");
             return false;
         }
+        Console.WriteLine($"[demo] Signature verification succeeded for message from {client_name}");
 
         // Decrypt 
         AesEncryption aes;
@@ -1096,6 +1066,7 @@ class Program
         }
 
         string plaintext = aes.Decrypt(message.EncryptedContent);
+        Console.WriteLine($"[demo] Decryption succeeded for message from {client_name}");
 
         decryptedMessage = new Message
         {
