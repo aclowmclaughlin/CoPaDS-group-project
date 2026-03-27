@@ -860,8 +860,8 @@ class Program
             Content = message,
         };
 
-        Message encrypedMessage = CreateEncryptedChatMessage(client_name, plainMessage);
-        clientMessageQueue!.EnqueueOutgoing(encrypedMessage);
+        Message encryptedMessage = CreateEncryptedChatMessage(client_name, plainMessage);
+        clientMessageQueue!.EnqueueOutgoing(encryptedMessage);
         return true;
     }
 
