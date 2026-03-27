@@ -110,7 +110,14 @@ public class TcpClientHandler
                     continue;
                 }
 
-                OnMessageReceived?.Invoke(peer, message);
+                try
+                {
+                    OnMessageReceived?.Invoke(peer, message);
+                }
+                catch (Exception exception)
+                {
+                    Console.WriteLine($"Rejected erroneous message from peer {peer.Id}: {exception.Message}");
+                }
             }
         
         }

@@ -303,6 +303,17 @@ public class TcpServer
         }
     }
 
+    public IEnumerable<string> GetRoomsForPeer(Peer peer)
+    {
+        lock (_rooms_lock)
+        {
+            return _rooms
+                .Where(roomEntry => roomEntry.Value.Contains(peer))
+                .Select(roomEntry => roomEntry.Key)
+                .ToList();
+        }
+    }
+
     public Peer? GetPeerByName(string name)
     {
         lock(_connectedPeers)

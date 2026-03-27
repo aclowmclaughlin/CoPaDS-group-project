@@ -2,6 +2,7 @@
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
+using System.Security.Cryptography;
 using System.Collections.Concurrent;
 using System.Net;
 using SecureMessenger.Core;
@@ -56,23 +57,19 @@ class Program
     // Examples:
 
     // creates objects for all the items used below
-     private static MessageQueue? serverMessageQueue;
-     private static MessageQueue? clientMessageQueue;
-     private static TcpServer? tcpServer;
-     private static TcpClientHandler? tcpClientHandler;
-     private static ConsoleUI? consoleUI;
-     private static CancellationTokenSource? cancellationTokenSource;
+    private static MessageQueue? serverMessageQueue;
+    private static MessageQueue? clientMessageQueue;
+    private static TcpServer? tcpServer;
+    private static TcpClientHandler? tcpClientHandler;
+    private static ConsoleUI? consoleUI;
+    private static CancellationTokenSource? cancellationTokenSource;
 
-     //private static MessageHistory? messageHistory;   <--not implemented, will use later 
+    //private static MessageHistory? messageHistory;   <--not implemented, will use later 
 
     private static readonly ConcurrentDictionary<string, AesEncryption> peerAesEncryptions = new();
     private static readonly ConcurrentDictionary<string, byte[]> peerPublicKeys = new();
-
-
     private static readonly ConcurrentDictionary<string, KeyExchange> peerKeyExchanges = new();
-
     private static readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> pendingKeyExchanges = new();
-
     private static readonly ConcurrentDictionary<string, TaskCompletionSource<Dictionary<string, byte[]>>> pendingRoomPeerLists = new();
 
     private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
@@ -111,8 +108,7 @@ class Program
         
         tcpClientHandler.OnConnected+= HandleClientPeerConnected;
         tcpClientHandler.OnMessageReceived+= HandleClientMessageReceived;
-        tcpClientHandler.OnDisconnected += peer =>
-            Console.WriteLine("disconnected ;)");
+        tcpClientHandler.OnDisconnected += peer => Console.WriteLine("Disconnected.");
 
 
         // TODO: Start background threads
@@ -413,7 +409,13 @@ class Program
                 {
                     var peersList = tcpServer!.GetConnectedPeers()
                         .Where(connectedPeer => !string.IsNullOrWhiteSpace(connectedPeer.Name))
-                        .Select(connectedPeer => connectedPeer.Name)
+                        .OrderBy(connectedPeer => connectedPeer.Name == peer.Name ? 0 : 1)
+                        .ThenBy(connectedPeer => connectedPeer.Name)
+                        .Select(connectedPeer =>
+                        {
+                            string rooms = string.Join(";", tcpServer.GetRoomsForPeer(connectedPeer));
+                            return $"{connectedPeer.Name}|{rooms}";
+                        })
                         .Distinct()
                         .ToList();
 
@@ -603,22 +605,46 @@ class Program
                 }
             case MessageType.ListPeersReply:
                 {
-                    // Console.WriteLine($"[client] Received ListPeersReply: '{message.Content}'");
-
-                    string[] peer_names = message.Content
+                    string[] peerEntries = message.Content
                         .Split(",", StringSplitOptions.RemoveEmptyEntries);
 
-                    string display = peer_names.Length == 0
-                        ? "(no peers)"
-                        : string.Join(", ", peer_names);
+                    if (peerEntries.Length == 0)
+                    {
+                        clientMessageQueue!.EnqueueIncoming(new Message
+                        {
+                            Type = MessageType.ServerNotice,
+                            Sender = "SERVER",
+                            TargetPeerID = localUserName,
+                            Content = "Peers: (none)"
+                        });
+                        break;
+                    }
+
+                    List<string> lines = new();
+
+                    foreach (string peerEntry in peerEntries)
+                    {
+                        string[] split = peerEntry.Split("|", 2);
+                        string peerName = split[0];
+                        string roomsRaw = split.Length > 1 ? split[1] : string.Empty;
+
+                        string roomsDisplay = string.IsNullOrWhiteSpace(roomsRaw)
+                            ? "none"
+                            : string.Join(", ", roomsRaw.Split(";", StringSplitOptions.RemoveEmptyEntries));
+
+                        string prefix = peerName == localUserName ? "You" : "Peer";
+                        lines.Add($"\t- {prefix}: {peerName} (rooms: {roomsDisplay})");
+                    }
+                    lines.Insert(0, "Peers:");
 
                     clientMessageQueue!.EnqueueIncoming(new Message
                     {
                         Type = MessageType.ServerNotice,
                         Sender = "SERVER",
                         TargetPeerID = localUserName,
-                        Content = $"Peers: {display}"
+                        Content = string.Join(Environment.NewLine, lines)
                     });
+
                     break;
                 }
             case MessageType.ListPeersInRoomReply:
@@ -1049,35 +1075,49 @@ class Program
             return false;
         }
 
-        bool valid = keyExchange.Signer.VerifyData(message.EncryptedContent, message.Signature, peer_public_key!);
-        if(!valid)
+        try
         {
-            Console.WriteLine("Signature verification failed");
+            bool valid = keyExchange.Signer.VerifyData(message.EncryptedContent, message.Signature, peer_public_key!);
+            if(!valid)
+            {
+                Console.WriteLine("Signature verification failed");
+                return false;
+            }
+            Console.WriteLine($"[demo] Signature verification succeeded for message from {client_name}");
+
+            // Decrypt 
+            AesEncryption aes;
+            if(!peerAesEncryptions.TryGetValue(client_name, out aes!))
+            {
+                Console.WriteLine("No AES session found for peer");
+                return false;
+            }
+
+            string plaintext = aes.Decrypt(message.EncryptedContent);
+            Console.WriteLine($"[demo] Decryption succeeded for message from {client_name}");
+        
+
+            decryptedMessage = new Message
+            {
+                Type            = message.Type,
+                Sender          = message.Sender,
+                TargetPeerID    = message.TargetPeerID,
+                Room            = message.Room,
+                Content         = plaintext,
+                Timestamp       = message.Timestamp
+            };
+
+            return true;
+        }
+        catch (CryptographicException exception)
+        {
+            Console.WriteLine($"Rejected tampered or invalid encrypted message from {client_name}: {exception.Message}");
             return false;
         }
-        Console.WriteLine($"[demo] Signature verification succeeded for message from {client_name}");
-
-        // Decrypt 
-        AesEncryption aes;
-        if(!peerAesEncryptions.TryGetValue(client_name, out aes!))
+        catch (Exception exception)
         {
-            Console.WriteLine("No AES session found for peer");
+            Console.WriteLine($"Failed to process encrypted message from {client_name}: {exception.Message}");
             return false;
         }
-
-        string plaintext = aes.Decrypt(message.EncryptedContent);
-        Console.WriteLine($"[demo] Decryption succeeded for message from {client_name}");
-
-        decryptedMessage = new Message
-        {
-            Type            = message.Type,
-            Sender          = message.Sender,
-            TargetPeerID    = message.TargetPeerID,
-            Room            = message.Room,
-            Content         = plaintext,
-            Timestamp       = message.Timestamp
-        };
-
-        return true;
     }
 }
