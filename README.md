@@ -43,29 +43,48 @@ dotnet run --project SecureMessenger.csproj
 ## Usage
 
 ### Available Commands
+- `/help` - Displays all possible commands
 - `/connect <ip> <port>` - Connect to a peer at the specified address
 - `/listen <port>` - Start listening for incoming connections
 - `/peers` - List all known peers
 - `/history` - View message history
 - `/quit` - Exit the application
+- `/exit` - Ends current session
+- `/join #<room>` - Join a room
+- `/create #<room>` - Create a room with the specified room-id
+- `/leave #<room>` - Leaves the room with the specified room-id
+- `/rooms` - lists all rooms that are registers with the server
+- `/msg #<room> message` - Send a message to the specified room
 
 ### Example Session
 ```
-Secure Distributed Messenger
-============================
+================================
+| Secure Distributed Messenger |
+================================
 Type /help for available commands
+Local client name: SophLaptop-9260
 
-/listen 5000
-Listening on port 5000...
+/connect localhost 5000
+Connected to server at 127.0.0.1, 5000
 
-/connect 192.168.1.100 5000
-Connected to 192.168.1.100:5000
+/rooms
+[12:00:26] SERVER: Rooms: #demo, #secretroom
 
-Hello, world!
-[10:30:45] You: Hello, world!
-[10:30:47] Peer1: Hi there!
+/join #demo
+[12:00:40] SERVER: Joined room #demo.
+
+/msg #demo hello there 
+[12:00:48] SophLaptop-9260: hello there
+[12:01:04] SophLaptop-11672: hey girl
+
+/msg #demo k bye
+[12:01:15] SophLaptop-9260: k bye
+
+/leave #demo
+[12:01:24] SERVER: Left room #demo.
 
 /quit
+Quitting program ;)
 Goodbye!
 ```
 
