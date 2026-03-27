@@ -78,9 +78,17 @@ class Program
 
     private static readonly ConcurrentDictionary<string, KeyExchange> peerKeyExchanges = new();
 
+    private static readonly ConcurrentDictionary<string, TaskCompletionSource<bool>> pendingKeyExchanges = new();
+
     private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
-    
+
+    // lowkey idk if we need these since we're mostly modifying concurrent dicts
+    private static readonly object _peerEncryptionLock = new();
+
+    private static readonly object _peerKeyExchangeLock = new();
+
     public static int peery = 0;
+
 
     static async Task Main(string[] args)
     {
@@ -471,16 +479,16 @@ class Program
         switch(message.Type) // Handle messages differently based on message type
         {
             case MessageType.PublicKey:
-                HandlePublicKeyMessage(message);
+                HandlePublicKeyMessage(peer, message);
                 break;
 
             case MessageType.SessionKey:
-                HandleSessionKeyMessage(message);
+                HandleSessionKeyMessage(peer, message);
                 break;
 
             case MessageType.RoomChat:
             case MessageType.Chat:
-                HandleEncryptedChatMessage(message);
+                HandleEncryptedChatMessage(peer, message, false); //set to false for testing purposes
                 break;
             
             case MessageType.ListRoomsReply:
@@ -626,13 +634,13 @@ class Program
         return null;
     }
 
-    private static bool SendMessageToClient(string client_name, string message, string room)
+    private static async Task<bool> SendMessageToClient(string client_name, string message, string room)
     {
         // check if we are already connected to the client (they exist in the connection dictionary)
-        if (!peerAesEncryptions.ContainsKey(client_name))
+        if (!peerAesEncryptions.TryGetValue(client_name, out _))
         {
             // if we are not, connect to the client
-            CreateAESConnectionWithClient(client_name);
+            await CreateAESConnectionWithClient(client_name);
         }
         // send the message to the specific client
         Message plainMessage = new Message
@@ -649,9 +657,45 @@ class Program
         return true;
     }
 
-    private static bool CreateAESConnectionWithClient(string client_name)
+    private static async Task<bool> CreateAESConnectionWithClient(string client_name)
     {
         //TODO: Make this work
+        if (peerAesEncryptions.ContainsKey(client_name))
+        {
+            return true;
+        }
+
+        // try to get public peer key
+        if (!peerPublicKeys.TryGetValue(client_name, out var peerPublicKey))
+        {
+            Console.WriteLine($"No public key for client {client_name}");
+            return false;
+        }
+
+        KeyExchange keyExchange = new();
+        keyExchange.ReceivePublicKey(peerPublicKey);
+        peerKeyExchanges[client_name] = keyExchange;
+
+        // wait
+        var TaskCompletionBool = new TaskCompletionSource<bool>();
+        pendingKeyExchanges[client_name] = TaskCompletionBool;
+
+        // send out pub key
+        Message message = new()
+        {
+            Type = MessageType.PublicKey,
+            Sender = localUserName,
+            TargetPeerID = client_name,
+            PublicKey = keyExchange.GetPublicKey()
+        };
+
+        clientMessageQueue!.EnqueueOutgoing(message);
+        Console.WriteLine($"Message sent, waiting on AES key");
+
+        await TaskCompletionBool.Task;
+
+        // should be true if sucessful
+        return pendingKeyExchanges.TryRemove(client_name, out _);
     }
 
     private static void HandlePeerConnected(Peer peer)
@@ -678,14 +722,14 @@ class Program
     /// Processes a received public key message, stores the peer's public key, 
     /// generates an AES session key, and sends the encrypted session key back.
     /// </summary>
-    private static void HandlePublicKeyMessage(Message message)
+    private static void HandlePublicKeyMessage(Peer peer, Message message)
     {
         //TODO fix this
         if(message.PublicKey == null)
             return;
 
         KeyExchange? keyExchange;
-        lock (peerKeyExchangeLock)
+        lock (_peerEncryptionLock)
         {
             peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
         }
@@ -702,7 +746,7 @@ class Program
 
         Console.WriteLine($"Received public key from {peer.Id}");
 
-        if(!generateSessionKey || keyExchange.IsEstablished || peer.AesKey != null)
+        if(peerAesEncryptions.ContainsKey(peer.Id)) // instead of !generateSessionKey || keyExchange.IsEstablished || peer.AesKey != null
             return;
 
         // Encrypt and send generated AES key
@@ -716,7 +760,7 @@ class Program
 
         peer.AesKey = keyExchange.SessionKey;
 
-        lock(peerEncryptionLock)
+        lock(_peerEncryptionLock)
         {
             peerAesEncryptions[peer.Id] = new AesEncryption(keyExchange.SessionKey);
         }
@@ -745,7 +789,7 @@ class Program
             return;
 
         KeyExchange? keyExchange;
-        lock(peerKeyExchangeLock)
+        lock(_peerKeyExchangeLock)
         {
             peerKeyExchanges.TryGetValue(peer.Id, out keyExchange);
         }
@@ -767,7 +811,7 @@ class Program
 
         peer.AesKey = keyExchange.SessionKey;
 
-        lock(peerEncryptionLock)
+        lock(_peerEncryptionLock)
         {
             peerAesEncryptions[peer.Id] = new AesEncryption(keyExchange.SessionKey);
         }
@@ -789,7 +833,7 @@ class Program
             return;
         }
 
-        if(TryDecryptAndVerify(peer, message, out Message? decryptedMessage) && decryptedMessage != null)
+        if(TryDecryptAndVerify(peer.Id, message, out Message? decryptedMessage) && decryptedMessage != null)
         {
             clientMessageQueue!.EnqueueIncoming(decryptedMessage);
         }
