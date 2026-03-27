@@ -119,6 +119,7 @@ public class TcpServer
         await peer.Stream.ReadExactlyAsync(peerPublicKey, 0, keyLength);
 
         peer.PublicKey = peerPublicKey;
+        Console.WriteLine($"[server] Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
 
         // Add the peer to _connectedPeers (with proper locking)
         lock(_connectedPeers)

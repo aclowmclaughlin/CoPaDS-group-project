@@ -141,6 +141,7 @@ class Program
 
 
         Console.WriteLine("Type /help for available commands");
+        Console.WriteLine($"Local client name: {localUserName}");
 
         // Main loop - handle user input
         bool running = true;
@@ -185,6 +186,14 @@ class Program
                         if (connected)
                         {
                             Console.WriteLine($"Connected to peer {peery}");
+                            Console.WriteLine($"This terminal is: {localUserName}");
+
+                            // Register this client's logical name with the server immediately to show up in /list
+                            clientMessageQueue!.EnqueueOutgoing(new Message
+                            {
+                                Type = MessageType.ListPeers,
+                                Sender = localUserName
+                            });
                         }
                         else
                         {
@@ -342,7 +351,10 @@ class Program
     private static void HandleServerMessageReceived(Peer peer, Message message)
     {
         if(!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
+        {
             peer.Name = message.Sender;
+            Console.WriteLine($"[server] Registered client name {peer.Name} for socket {peer.Id}");
+        }
 
         // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE
         // OF THE SERVER MESSAGE QUEUE
@@ -358,10 +370,11 @@ class Program
 
                 if (destPeer == null)
                 {
-                    Console.WriteLine($"Got a message destined for client {forwardingName}, but no connected client with that name exists.");
+                    Console.WriteLine($"[server] DROP {message.Type} from {message.Sender} -> {forwardingName}: destination not connected");
                     break;
                 }
 
+                Console.WriteLine($"[server] ROUTE {message.Type} from {message.Sender} -> {forwardingName}");
                 serverMessageQueue!.EnqueueOutgoing(message);
                 break;
             }
@@ -467,6 +480,10 @@ class Program
 
                         peerEntries.Add($"{otherPeer.Name}:{Convert.ToBase64String(otherPeer.PublicKey)}");
                     }
+                    
+                    string replyContent = string.Join(",", peerEntries);
+                    Console.WriteLine($"[server] ListPeersInRoom for {peer.Name} in {room_name}: {peerEntries.Count} peer key(s)");
+
                     Message response_message = new Message
                     {
                         Type = MessageType.ListPeersInRoomReply,
@@ -668,6 +685,7 @@ class Program
                 continue;
             }
 
+            Console.WriteLine($"[server] SEND {msg.Type} to {msg.TargetPeerID}");
             await tcpServer.SendToPeerAsync(destinationPeer, msg);
         }
     }
@@ -860,7 +878,6 @@ class Program
             return;
 
         string remoteClient = message.Sender;
-        peerPublicKeys[remoteClient] = message.PublicKey;
 
         var keyExchange = peerKeyExchanges.GetOrAdd(remoteClient, _ => new KeyExchange());
         keyExchange.ReceivePublicKey(message.PublicKey);
@@ -979,7 +996,8 @@ class Program
 
         // Encrypt, sign, and return given message using peer's AES session key
         byte[] encryptedBytes = aes.Encrypt(logicalMessage.Content);
-        byte[] signature = keyExchange.Signer.SignData(encryptedBytes); // Use keyExchange for peer to sign data
+        var signer = new MessageSigner(tcpClientHandler!.rsa_encryption.Rsa); // Use RSA key to sign message
+        byte[] signature = signer.SignData(encryptedBytes);
 
         return new Message
         {
