@@ -37,12 +37,12 @@ dotnet run
 ```
 
 ## Security Protocol Overview
+We utilize a Diffe-Hellman secure key distrabution to ensure that each client connects safely. 
 
 ### Encryption Protocol
-The messenger uses a hybrid cryptographic design. RSA is used to exchange a shared AES session key, and AES is then used to encrypt message contents. Encrypted messages are signed before delivery so recipients can verify integrity before decrypting.
+We utilize RSA key exchange with AES data encryption.
 
 #### Key Exchange Process
-Given two clients/peers:
 
 1. The initiating peer sends its RSA public key to the other peer.
 2. The receiving peer generates a new AES session key.
