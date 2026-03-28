@@ -47,14 +47,14 @@ dotnet run --project SecureMessenger.csproj
 - `/connect <ip> <port>` - Connect to a peer at the specified address
 - `/listen <port>` - Start listening for incoming connections
 - `/peers` - List all known peers
-- `/history` - View message history
+- `/history` - View message history (to be implemented in Sprint 3)
 - `/quit` - Exit the application
-- `/exit` - Ends current session
+- `/create #<room>` - Create a room
 - `/join #<room>` - Join a room
-- `/create #<room>` - Create a room with the specified room-id
-- `/leave #<room>` - Leaves the room with the specified room-id
-- `/rooms` - lists all rooms that are registers with the server
-- `/msg #<room> message` - Send a message to the specified room
+- `/leave #<room>` - Leave a room
+- `/rooms` - List rooms
+- `/msg #<room> <message>` - Send a room message
+- `/tamper on|off` - Toggle demo tampering for the next encrypted message
 
 ### Example Session
 ```
@@ -88,7 +88,7 @@ Quitting program ;)
 Goodbye!
 ```
 
-When running multiple instances on the same device, use `/listen <port>` on one, and then `/connect <ip> <port>` on both
+When running multiple instances on the same device, start one instance with `/listen <port>` and connect from another instance using `/connect <ip> <port>`.
 
 ## Project Structure
 
@@ -177,6 +177,8 @@ All methods marked with `throw new NotImplementedException()` - look for the det
 ### Wire Protocol
 - Messages sent as newline-terminated strings
 - Sprint 2+: JSON-serialized Message objects with encrypted content
+- Initial public key delivery uses: `[4 bytes key length][public key bytes]`
+- Application messages use: `[message length as text][newline][JSON serialized Message object]`
 
 ### Encryption (Sprint 2)
 - **AES-256-CBC**: 32-byte key, 16-byte IV prepended to ciphertext
@@ -199,8 +201,13 @@ All methods marked with `throw new NotImplementedException()` - look for the det
 
 ## Known Issues
 
-[Document any known issues here]
+- No replay protection
+- Public keys are not independently verified
+- Metadata such as sender/room information is not encrypted
 
 ## Testing
 
-[Document testing procedures here]
+- Verified that encrypted messages are sent as ciphertext rather than plaintext
+- Verified that RSA key exchange establishes a shared AES session key
+- Verified that modified ciphertext fails signature verification
+- Verified that separate peer conversations maintain separate encryption state
