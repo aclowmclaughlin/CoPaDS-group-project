@@ -1,16 +1,15 @@
 # Sprint 3 Documentation (Final)
 ## Secure Distributed Messenger
 
-**Team Name:** [Your Team Name]
+**Team Name:** Team 7
 
 **Team Members:**
-- [Name 1] - [Role/Responsibilities]
-- [Name 2] - [Role/Responsibilities]
-- [Name 3] - [Role/Responsibilities]
-- [Name 4] - [Role/Responsibilities]
-- [Name 5] - [Role/Responsibilities]
+- Rue Clow-McLaughlin - PeerDiscovery.cs, Server/ClientHandler Combination
+- Devlin Gallagher    - ReconnectionPolicy.cs, key saving redesign (save to peers)
+- Nicholas Merante    - HearbeatMonitor.cs, key exchange redesign (move to peer connection list), Add peer SendAsync() methods
+- Sophie Duquette     - MessageHistory.cs, peer receive callback (in Program) redesign (needs to do gossip protocol)
 
-**Date:** [Submission Date]
+**Date:** Friday, April 24th
 
 ---
 
