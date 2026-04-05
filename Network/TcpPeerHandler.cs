@@ -3,6 +3,8 @@
 
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics.Arm;
 using System.Text.Json;
 using SecureMessenger.Core;
 using SecureMessenger.Security;
@@ -20,8 +22,6 @@ public class TcpServer
     private readonly object _connections_lock = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Thread? _listenThread;
-
-    public readonly RsaEncryption rsa_encryption = new();
 
     private readonly Dictionary<string, List<Peer>> _rooms = new();
     private object _rooms_lock = new();
@@ -96,7 +96,90 @@ public class TcpServer
     }
 
     
-        /// <summary>
+    /// <summary>
+    /// Performs the key exchange from the sender (ConnectAsync caller) side.
+    /// </summary>
+    /// <param name="peer">What Peer we are exchanging keys with</param>
+    private async Task ExchangeKeySender(Peer peer)
+    {
+        KeyExchange keyExchange = new();
+        // send our public key.
+        byte[] publicKey = keyExchange.GetPublicKey();
+        byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
+
+        await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+        await peer.Stream.WriteAsync(publicKey, 0, publicKey.Length);
+        await peer.Stream.FlushAsync();
+        
+        // receive their public key
+        byte[] keyLengthBytes = new byte[4];
+        await peer.Stream!.ReadExactlyAsync(keyLengthBytes, 0, 4);
+
+        int keyLength = BitConverter.ToInt32(keyLengthBytes, 0);
+        byte[] peerPublicKey = new byte[keyLength];
+        await peer.Stream.ReadExactlyAsync(peerPublicKey, 0, keyLength);
+        
+        // save peer public key
+        peer.PublicKey = peerPublicKey;
+        keyExchange.ReceivePublicKey(peerPublicKey);
+        Console.WriteLine($"Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
+        
+        // wait to receive their private key.
+        keyLengthBytes = new byte[4];
+        await peer.Stream!.ReadExactlyAsync(keyLengthBytes, 0, 4);
+
+        keyLength = BitConverter.ToInt32(keyLengthBytes, 0);
+        byte[] peerAesKey = new byte[keyLength];
+        await peer.Stream.ReadExactlyAsync(peerAesKey, 0, keyLength);
+
+        // save aes key
+        keyExchange.ReceiveEncryptedSessionKey(peerAesKey);
+        keyExchange.Complete();
+        peer.AesKey = peerAesKey;
+        Console.WriteLine($"Received private AES key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
+    }
+
+    /// <summary>
+    /// Performs the key exchange from the receiver (HandleNewConnection caller) side.
+    /// </summary>
+    /// <param name="peer">What Peer we are exchanging keys with</param>
+    private async Task ExchangeKeyReceiver(Peer peer)
+    {
+        KeyExchange keyExchange = new();
+        // record our public key
+        var ourPublicKey = keyExchange.GetPublicKey();
+        // receive their public key
+        byte[] keyLengthBytes = new byte[4];
+        await peer.Stream!.ReadExactlyAsync(keyLengthBytes, 0, 4);
+
+        int keyLength = BitConverter.ToInt32(keyLengthBytes, 0);
+        byte[] peerPublicKey = new byte[keyLength];
+        await peer.Stream.ReadExactlyAsync(peerPublicKey, 0, keyLength);
+
+        peer.PublicKey = peerPublicKey;
+        keyExchange.ReceivePublicKey(peerPublicKey);
+        Console.WriteLine($"Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
+        
+        // send our public key
+        byte[] lengthBytes = BitConverter.GetBytes(ourPublicKey.Length);
+
+        await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+        await peer.Stream.WriteAsync(ourPublicKey, 0, ourPublicKey.Length);
+        await peer.Stream.FlushAsync();
+        // send a private key.
+        byte[] aesSessionKey = keyExchange.CreateEncryptedSessionKey();
+        
+        lengthBytes = BitConverter.GetBytes(aesSessionKey.Length);
+        await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+        await peer.Stream.WriteAsync(aesSessionKey, 0, aesSessionKey.Length);
+        await peer.Stream.FlushAsync();
+        // save private key.
+        peer.AesKey = aesSessionKey;
+        keyExchange.Complete();
+        Console.WriteLine($"Sent AES key to {peer.Address}:{peer.Port}");
+    }
+    
+    /// <summary>
     /// Connect to a peer at the specified address and port.
     /// </summary>
     public async Task<bool> ConnectAsync(string host, int port)
@@ -121,12 +204,8 @@ public class TcpServer
                 IsConnected = true
             };
 
-            byte[] publicKey = rsa_encryption.ExportPublicKey();
-            byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
-
-            await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
-            await peer.Stream.WriteAsync(publicKey, 0, publicKey.Length);
-            await peer.Stream.FlushAsync();
+            // perform key exchange
+            await ExchangeKeySender(peer);
 
             lock(_connections_lock) { _connections[peer.Id] = peer; };
 
@@ -164,15 +243,7 @@ public class TcpServer
             IsConnected = true
         };
 
-        byte[] keyLengthBytes = new byte[4];
-        await peer.Stream!.ReadExactlyAsync(keyLengthBytes, 0, 4);
-
-        int keyLength = BitConverter.ToInt32(keyLengthBytes, 0);
-        byte[] peerPublicKey = new byte[keyLength];
-        await peer.Stream.ReadExactlyAsync(peerPublicKey, 0, keyLength);
-
-        peer.PublicKey = peerPublicKey;
-        Console.WriteLine($"[server] Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
+        await ExchangeKeyReceiver(peer);
 
         // Add the peer to _connectedPeers (with proper locking)
         lock(_connections_lock)

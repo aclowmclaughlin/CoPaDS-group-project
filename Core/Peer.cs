@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Net.Sockets;
+using SecureMessenger.Security;
 
 namespace SecureMessenger.Core;
 
@@ -23,9 +24,9 @@ public class Peer
     public NetworkStream? Stream { get; set; }
 
     // Sprint 2: Per-session encryption keys
-    // public byte[]? AesKey { get; set; }
+    public byte[]? AesKey { get; set; }
     public byte[]? PublicKey { get; set; }
-
+    
     public override string ToString()
     {
         var status = IsConnected ? "Connected" : "Disconnected";
