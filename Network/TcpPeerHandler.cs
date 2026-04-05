@@ -5,19 +5,23 @@ using System.Net;
 using System.Net.Sockets;
 using System.Text.Json;
 using SecureMessenger.Core;
+using SecureMessenger.Security;
 
 namespace SecureMessenger.Network;
 
 /// <summary>
-/// TCP server that listens for incoming peer connections.
-/// Each peer runs both a server (to accept connections) and client (to initiate connections).
+/// Handles incoming and outgoing TCP connections from and to other peers.
 /// </summary>
 public class TcpServer
 {
     private TcpListener? _listener;
-    private readonly List<Peer> _connectedPeers = new();
+    private readonly Dictionary<string, Peer> _connections = new();
+
+    private readonly object _connections_lock = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Thread? _listenThread;
+
+    public readonly RsaEncryption rsa_encryption = new();
 
     private readonly Dictionary<string, List<Peer>> _rooms = new();
     private object _rooms_lock = new();
@@ -34,7 +38,7 @@ public class TcpServer
     /// </summary>
     public void Start(int port)
     {
-        Console.WriteLine($"Starting server...");
+        Console.WriteLine($"Starting Peer Handler...");
         // Store the port number
         Port = port;
 
@@ -53,7 +57,7 @@ public class TcpServer
         _listenThread.Start();
 
         // Print a message indicating the server is listening
-        Console.WriteLine($"Server started and listening on port {port}");
+        Console.WriteLine($"Peer handler started and listening on port {port}");
     }
 
     /// <summary>
@@ -91,6 +95,56 @@ public class TcpServer
         }
     }
 
+    
+        /// <summary>
+    /// Connect to a peer at the specified address and port.
+    /// </summary>
+    public async Task<bool> ConnectAsync(string host, int port)
+    {
+        //TODO: add error other handling? (cringe)
+        try
+        {
+            var client = new TcpClient();
+
+            if(host == "localhost") // Convert localhost string to IP number
+                host = "127.0.0.1";
+
+            await client.ConnectAsync(host, port);
+            
+            // Core\Peer.cs
+            var peer = new Peer 
+            {
+                Client = client,
+                Stream = client.GetStream(),
+                Address = IPAddress.Parse(host), // thank you System.Net
+                Port = port,
+                IsConnected = true
+            };
+
+            byte[] publicKey = rsa_encryption.ExportPublicKey();
+            byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
+
+            await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
+            await peer.Stream.WriteAsync(publicKey, 0, publicKey.Length);
+            await peer.Stream.FlushAsync();
+
+            lock(_connections_lock) { _connections[peer.Id] = peer; };
+
+            OnPeerConnected?.Invoke(peer);
+
+            _ = Task.Run(() => ReceiveLoop(peer));
+            
+            return true;
+        }
+        
+        catch (SocketException SE) 
+        {
+            Console.WriteLine($"Error: {SE.Message}");
+            return false;
+        }
+    }
+
+
     /// <summary>
     /// Handle a new incoming connection by creating a Peer and starting its receive thread.
     /// </summary>
@@ -121,9 +175,9 @@ public class TcpServer
         Console.WriteLine($"[server] Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
 
         // Add the peer to _connectedPeers (with proper locking)
-        lock(_connectedPeers)
+        lock(_connections_lock)
         {
-            _connectedPeers.Add(peer);
+            _connections.Add(peer.Id, peer);
         }
 
         // Invoke OnPeerConnected event
@@ -183,11 +237,15 @@ public class TcpServer
                 OnMessageReceived?.Invoke(peer, message);
             }
         }
-        catch(IOException e) // Handle IOException (connection lost)
-        {
-            Console.WriteLine($"Connection Lost - IO exception: {e.Message}");
+        catch (IOException IOE) when (peer.IsConnected){
+            Console.WriteLine($"Connection lost: {IOE.Message}");
         }
-        finally // In finally block, call DisconnectPeer
+        
+        catch (ObjectDisposedException)
+        {
+            //we chillin
+        }
+        finally
         {
             DisconnectPeer(peer);
         }
@@ -196,24 +254,24 @@ public class TcpServer
     // /// <summary>
     // /// Broadcast a message to all connected peers.
     // /// </summary>
-    // public async Task BroadcastAsync(Message msg)
-    // {
-    //     List<Peer> allPeers;
-    //     lock (_connectedPeers)
-    //     {
-    //         allPeers = _connectedPeers.ToList();
-    //     }
+    public async Task BroadcastAsync(Message msg)
+    {
+        List<Peer> allPeers;
+        lock (_connections_lock)
+        {
+            allPeers = _connections.Values.ToList();
+        }
 
-    //     foreach (Peer peer in allPeers)
-    //     {
-    //         await SendToPeerAsync(peer, msg);
-    //     }
-    // }
+        foreach (Peer peer in allPeers)
+        {
+            await SendAsync(peer, msg);
+        }
+    }
 
     /// <summary>
     /// Send a message to specific peer
     /// </summary>
-    public async Task SendToPeerAsync(Peer peer, Message msg)
+    public async Task SendAsync(Peer peer, Message msg)
     {
         if (peer.Stream == null || !peer.IsConnected)
         {
@@ -241,9 +299,9 @@ public class TcpServer
         peer.Stream?.Dispose();
 
         // Remove the peer from _connectedPeers (with proper locking)
-        lock(_connectedPeers)
+        lock(_connections_lock)
         {
-            _connectedPeers.Remove(peer);
+            _connections.Remove(peer.Id);
         }
 
         // Remove the peer from all rooms
@@ -272,12 +330,9 @@ public class TcpServer
         IsListening = false;
         
         // Disconnect all connected peers (with proper locking)
-        lock(_connectedPeers)
+        foreach(Peer peer in GetConnectedPeers())
         {
-            foreach(Peer peer in _connectedPeers.ToList())
-            {
-                DisconnectPeer(peer);
-            }
+            DisconnectPeer(peer);
         }
         
         // Wait for the listen thread to finish (with timeout)
@@ -289,9 +344,9 @@ public class TcpServer
     /// </summary>
     public IEnumerable<Peer> GetConnectedPeers()
     {
-        lock (_connectedPeers)
+        lock (_connections)
         {
-            return _connectedPeers.ToList();
+            return _connections.Values.ToList();
         }
     }
 
@@ -316,10 +371,12 @@ public class TcpServer
 
     public Peer? GetPeerByName(string name)
     {
-        lock(_connectedPeers)
+        Peer? peer = null;
+        lock(_connections)
         {
-            return _connectedPeers.FirstOrDefault(peer => peer.IsConnected && peer.Name == name);
+            bool exists = _connections.TryGetValue(name, out peer);
         }
+        return peer;
     }
 
     public List<Peer>? GetPeersInRoom(string room_name)
