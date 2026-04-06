@@ -9,12 +9,9 @@ public enum MessageType
 {
     // End-to-end client messages
     Chat,
-    PublicKey,
-    SessionKey,
     RoomChat,
 
     // Server commands
-    RegisterClient,
     ListPeers,
     ListRooms,
     ListPeersInRoom,
