@@ -67,7 +67,7 @@ public class PeerDiscovery
     {
         IPEndPoint endPoint = new IPEndPoint(IPAddress.Broadcast, _broadcastPort);
         CancellationToken cancellationToken = _cancellationTokenSource!.Token;
-        byte[] broadcastMessage = Encoding.UTF8.GetBytes($"PEER_MESSAGE_PREFIX:{LocalPeerId}:{TcpPort}");
+        byte[] broadcastMessage = Encoding.UTF8.GetBytes($"{PEER_MESSAGE_PREFIX}:{LocalPeerId}:{TcpPort}");
         while(!cancellationToken.IsCancellationRequested)
         {
             try
@@ -124,13 +124,12 @@ public class PeerDiscovery
         Peer this_peer = new Peer(){Port=port, Id=peerId};
         
         // check if peer has not been seen before
-        if(!_knownPeers.ContainsKey(peerId))
+        if(_knownPeers.TryAdd(peerId, this_peer))
         {
-            _knownPeers[peerId] = this_peer;
             OnPeerDiscovered!.Invoke(this_peer);
         }
 
-        // Always do these things:
+        // Record that we did receive a heartbeat from the peer.
         heartbeatMonitor.RecordHeartbeat(peerId);
         
     }
