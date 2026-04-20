@@ -63,6 +63,7 @@ class Program
     private static TcpClientHandler? tcpClientHandler;
     private static ConsoleUI? consoleUI;
     private static CancellationTokenSource? cancellationTokenSource;
+    private static HeartbeatMonitor? heartbeatMonitor;
 
     private static MessageHistory? messageHistory; 
 
@@ -75,6 +76,8 @@ class Program
     private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
 
     private static bool tamperNextEncryptedMessage = false;
+    
+    private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
 
     static async Task Main(string[] args)
     {
@@ -95,6 +98,7 @@ class Program
         tcpServer = new TcpServer();                  // TCP Server 
         tcpClientHandler = new TcpClientHandler();           //TCP client handler
         messageHistory = new MessageHistory();
+        heartbeatMonitor = new HeartbeatMonitor();
 
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
         // 2. TcpServer.OnMessageReceived - handle received messages
@@ -110,6 +114,20 @@ class Program
         tcpClientHandler.OnMessageReceived+= HandleClientMessageReceived;
         tcpClientHandler.OnDisconnected += peer => Console.WriteLine("Disconnected.");
 
+        heartbeatMonitor.OnHeartbeatReceived += peerId =>
+        {
+            if(EnableHeartbeatLogging)
+                Console.WriteLine($"Heartbeat received from {peerId}");
+        };
+
+        heartbeatMonitor.OnConnectionFailed += peerId =>
+        {
+            if(EnableHeartbeatLogging)
+                Console.WriteLine($"Heartbeat timeout for {peerId}");
+            tcpClientHandler?.Disconnect(peerId);
+        };
+        
+        heartbeatMonitor.Start();
 
         // TODO: Start background threads
         // 1. Start a thread/task for processing incoming messages

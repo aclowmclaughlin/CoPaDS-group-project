@@ -1,10 +1,7 @@
-#pragma warning disable CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
 using System.Collections.Concurrent;
-using System.Diagnostics;
-using SecureMessenger.Core;
 
 namespace SecureMessenger.Network;
 
@@ -34,94 +31,95 @@ public class HeartbeatMonitor
 
     /// <summary>
     /// Start the heartbeat monitoring loop.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create a new CancellationTokenSource
-    /// 2. Start MonitorLoop as a background task
     /// </summary>
     public void Start()
     {
-        throw new NotImplementedException("Implement Start() - see TODO in comments above");
+        if(_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+            return;
+
+        _cancellationTokenSource = new CancellationTokenSource();
+        _ = Task.Run(MonitorLoop);
     }
 
     /// <summary>
     /// Start monitoring a specific peer.
     /// Call this when a peer connects.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Record current time as the peer's last heartbeat
     /// </summary>
     public void StartMonitoring(string peerId)
     {
-        throw new NotImplementedException("Implement StartMonitoring() - see TODO in comments above");
+        _lastHeartbeat[peerId] = DateTime.Now;
     }
 
     /// <summary>
     /// Record that a heartbeat was received from a peer.
     /// Call this when you receive a heartbeat message.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Update the peer's last heartbeat time to now
-    /// 2. Invoke OnHeartbeatReceived event
     /// </summary>
     public void RecordHeartbeat(string peerId)
     {
-        throw new NotImplementedException("Implement RecordHeartbeat() - see TODO in comments above");
+        _lastHeartbeat[peerId] = DateTime.Now;
+        OnHeartbeatReceived?.Invoke(peerId);
     }
 
     /// <summary>
     /// Stop monitoring a peer.
     /// Call this when a peer disconnects normally.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Remove the peer from _lastHeartbeat dictionary
     /// </summary>
     public void StopMonitoring(string peerId)
     {
-        throw new NotImplementedException("Implement StopMonitoring() - see TODO in comments above");
+        _lastHeartbeat.TryRemove(peerId, out _);
     }
 
     /// <summary>
     /// Main monitoring loop - checks for timed out connections.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Loop while cancellation not requested:
-    ///    a. Get current time
-    ///    b. Iterate through all entries in _lastHeartbeat
-    ///    c. Calculate elapsed time since last heartbeat
-    ///    d. If elapsed > _timeout:
-    ///       - Log timeout message
-    ///       - Invoke OnConnectionFailed event
-    ///       - Call StopMonitoring for that peer
-    ///    e. Delay 1 second between checks
     /// </summary>
     private async Task MonitorLoop()
     {
-        throw new NotImplementedException("Implement MonitorLoop() - see TODO in comments above");
+        if (_cancellationTokenSource == null)
+            return;
+
+        CancellationToken cancellationToken = _cancellationTokenSource.Token;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            DateTime now = DateTime.Now;
+
+            foreach (var entry in _lastHeartbeat)
+            {
+                TimeSpan elapsed = now - entry.Value;
+
+                if (elapsed > _timeout)
+                {
+                    Console.WriteLine($"[Heartbeat] {entry.Key} connection timeout");
+                    OnConnectionFailed?.Invoke(entry.Key);
+                    StopMonitoring(entry.Key);
+                }
+            }
+
+            try
+            {
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
+            }
+            catch (TaskCanceledException) { break; }
+            catch (OperationCanceledException) { break; }
+        }
     }
 
     /// <summary>
     /// Check if a peer is still alive (received heartbeat recently).
-    ///
-    /// TODO: Implement the following:
-    /// 1. Try to get the peer's last heartbeat time
-    /// 2. If found, return true if (now - lastSeen) < _timeout
-    /// 3. If not found, return false
     /// </summary>
     public bool IsAlive(string peerId)
     {
-        throw new NotImplementedException("Implement IsAlive() - see TODO in comments above");
+        if (_lastHeartbeat.TryGetValue(peerId, out DateTime lastSeen))
+            return DateTime.Now - lastSeen < _timeout;
+
+        return false;
     }
 
     /// <summary>
     /// Stop monitoring all peers.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Cancel the cancellation token
     /// </summary>
     public void Stop()
     {
-        throw new NotImplementedException("Implement Stop() - see TODO in comments above");
+        _cancellationTokenSource?.Cancel();
     }
 }
-#pragma warning restore CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
