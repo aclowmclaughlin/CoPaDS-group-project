@@ -329,6 +329,43 @@ public class TcpPeerHandler
         }
     }
 
+    /// <summary>
+    /// Helper method for creating a Message object
+    /// </summary>
+    public Message CreateMessage(string msg, MessageType type=MessageType.Chat)
+    {
+        return new Message(){Content = msg, Type = type};
+    }
+  
+    /// <summary>
+    /// Sends a message to everybody in the specified room.
+    /// Returns True if all messages were sent to the room,
+    /// False if either the room doesn't exist, or if the 
+    /// operation was cancelled. 
+    /// The return value probably doesn't matter in 99% of circumstances
+    /// and can be generally ignored.
+    /// </summary>
+    /// <param name="roomName">The name of thee room</param>
+    /// <param name="message">The message to send</param>
+    /// <returns>If the message was sent to everyone in the room.</returns>
+    public async Task<bool> SendToRoom(string roomName, Message message)
+    {
+        // get the peers in the room
+        List<Peer>? peersInRoom = GetPeersInRoom(roomName);
+        if (peersInRoom == null) return false;
+        // for each peer, send a message to them specifically.
+        foreach (Peer peer in peersInRoom!)
+        {
+            // constantly check the cancellation token in case it get cancelled in the middle of the loop.
+            if (_cancellationTokenSource != null && _cancellationTokenSource.IsCancellationRequested)
+            {
+                return false;
+            }
+            await SendEncryptedMessageAsync(peer, message);
+        }
+        return true;
+    }
+
     // /// <summary>
     // /// Broadcast a message to all connected peers.
     // /// </summary>

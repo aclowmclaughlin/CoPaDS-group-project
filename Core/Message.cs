@@ -34,8 +34,8 @@ public class Message
     public Guid Id { get; set; } = Guid.NewGuid();
     public MessageType Type { get; set; } = MessageType.Chat;
 
-    public string Sender { get; set; }          = string.Empty;
-    public string TargetPeerID { get; set; }    = string.Empty;
+    public string Sender { get; set; }          = string.Empty; // no longer need field?
+    public string TargetPeerID { get; set; }    = string.Empty; // no longer need field?
     public string Room { get; set; }            = string.Empty;
 
     public string Content { get; set; } = string.Empty;
@@ -43,7 +43,7 @@ public class Message
     public byte[]? Signature { get; set; }
 
     public byte[]? PublicKey { get; set; }
-    public byte[]? EncryptedSessionKey { get; set; }
+    public byte[]? EncryptedSessionKey { get; set; } // no longer need field?
     
     public DateTime Timestamp { get; set; } = DateTime.Now;
     public override string ToString()
