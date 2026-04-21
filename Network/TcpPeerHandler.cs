@@ -3,8 +3,7 @@
 
 using System.Net;
 using System.Net.Sockets;
-using System.Runtime.InteropServices;
-using System.Runtime.Intrinsics.Arm;
+using System.Text;
 using System.Text.Json;
 using SecureMessenger.Core;
 using SecureMessenger.Security;
@@ -14,7 +13,7 @@ namespace SecureMessenger.Network;
 /// <summary>
 /// Handles incoming and outgoing TCP connections from and to other peers.
 /// </summary>
-public class TcpServer
+public class TcpPeerHandler
 {
     private TcpListener? _listener;
     private readonly Dictionary<string, Peer> _connections = new();
@@ -24,7 +23,10 @@ public class TcpServer
     private Thread? _listenThread;
 
     private readonly Dictionary<string, List<Peer>> _rooms = new();
-    private object _rooms_lock = new();
+    private object _roomsLock = new();
+
+    private RsaEncryption ourRSA = new RsaEncryption();
+    private MessageSigner ourMessageSigner;
 
     public event Action<Peer>? OnPeerConnected;
     public event Action<Peer>? OnPeerDisconnected;
@@ -32,6 +34,11 @@ public class TcpServer
 
     public int Port { get; private set; }
     public bool IsListening { get; private set; }
+
+    public TcpPeerHandler()
+    {
+        ourMessageSigner = new MessageSigner(ourRSA.Rsa);
+    }
 
     /// <summary>
     /// Start listening for incoming connections on the specified port.
@@ -104,7 +111,7 @@ public class TcpServer
     {
         KeyExchange keyExchange = new();
         // send our public key.
-        byte[] publicKey = keyExchange.GetPublicKey();
+        byte[] publicKey = ourRSA.ExportPublicKey();
         byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
 
         await peer.Stream!.WriteAsync(lengthBytes, 0, lengthBytes.Length);
@@ -357,6 +364,60 @@ public class TcpServer
         await writer.FlushAsync();
     }
 
+    /// <summary>
+    /// Encrypts and signs the provided message 
+    /// then sends it to the specified peer.
+    /// </summary>
+    public async Task SendEncryptedMessageAsync(Peer peer, Message msg)
+    {
+        Message encryptedMsg = peer.CreateEncryptedMessage(msg);
+        Message signedMessage = this.SignEncryptedMessage(encryptedMsg);
+        await this.SendAsync(peer, signedMessage);
+    }
+
+    /// <summary>
+    /// Signs an encrypted message
+    /// </summary>
+    /// <param name="unsignedMessage">The unsigned message</param>
+    /// <returns>The new signed message</returns>
+    public Message SignEncryptedMessage(Message unsignedMessage)
+    {
+        byte[] signature = ourMessageSigner.SignData(unsignedMessage.EncryptedContent!);
+        
+        return new Message
+        {
+            Type                = unsignedMessage.Type,
+            Sender              = unsignedMessage.Sender,
+            TargetPeerID        = unsignedMessage.TargetPeerID,
+            Room                = unsignedMessage.Room,
+            EncryptedContent    = unsignedMessage.EncryptedContent,
+            Signature           = signature,
+            Timestamp           = unsignedMessage.Timestamp
+        };
+    }
+
+    /// <summary>
+    /// Signs an unencrypted message (I don't think this is actually useful)
+    /// </summary>
+    /// <param name="unsignedMessage">The unsigned, unencrypted message</param>
+    /// <returns>The new signed message</returns>
+    public Message SignUnencryptedMessage(Message unsignedMessage)
+    {
+        byte[] signature = ourMessageSigner.SignData(Encoding.UTF8.GetBytes(unsignedMessage.Content));
+        
+        return new Message
+        {
+            Type                = unsignedMessage.Type,
+            Sender              = unsignedMessage.Sender,
+            TargetPeerID        = unsignedMessage.TargetPeerID,
+            Room                = unsignedMessage.Room,
+            Content             = unsignedMessage.Content,
+            Signature           = signature,
+            Timestamp           = unsignedMessage.Timestamp
+        };
+    }
+
+
 
     /// <summary>
     /// Clean up a disconnected peer.
@@ -376,7 +437,7 @@ public class TcpServer
         }
 
         // Remove the peer from all rooms
-        lock (_rooms_lock)
+        lock (_roomsLock)
         {
             foreach (var roomEntry in _rooms)
                 roomEntry.Value.Remove(peer);
@@ -423,7 +484,7 @@ public class TcpServer
 
     public IEnumerable<string> ListRooms()
     {
-        lock(_rooms_lock)
+        lock(_roomsLock)
         {
             return _rooms.Keys;
         }
@@ -431,7 +492,7 @@ public class TcpServer
 
     public IEnumerable<string> GetRoomsForPeer(Peer peer)
     {
-        lock (_rooms_lock)
+        lock (_roomsLock)
         {
             return _rooms
                 .Where(roomEntry => roomEntry.Value.Contains(peer))
@@ -452,7 +513,7 @@ public class TcpServer
 
     public List<Peer>? GetPeersInRoom(string room_name)
     {
-        lock(_rooms_lock)
+        lock(_roomsLock)
         {
             if(_rooms.TryGetValue(room_name, out var peersInRoom))
                 return peersInRoom.ToList();
@@ -465,7 +526,7 @@ public class TcpServer
     {
         // returns true if the room existed already, 
         // false if the room did not exist (and was thus added)
-        lock(_rooms_lock)
+        lock(_roomsLock)
         {
             if(_rooms.TryGetValue(room_name, out _)) return true;
             _rooms.Add(room_name, new List<Peer>());
@@ -477,7 +538,7 @@ public class TcpServer
     {
         // returns false if the room doesn't exist,
         // true if the room was updated with the peer (or already had the peer)
-        lock(_rooms_lock)
+        lock(_roomsLock)
         {
             List<Peer>? currentPeersInRoom;
 
@@ -497,7 +558,7 @@ public class TcpServer
     {
         // returns false if the room doesn't exist,
         // true if the peer was removed (or didn't exist in the room)
-        lock(_rooms_lock)
+        lock(_roomsLock)
         {
             List<Peer>? currentPeersInRoom;
             if(!_rooms.TryGetValue(room_name, out currentPeersInRoom))
