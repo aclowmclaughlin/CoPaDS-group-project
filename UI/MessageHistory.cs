@@ -1,8 +1,8 @@
-#pragma warning disable CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
 using System.Text.Json;
+using Microsoft.VisualBasic;
 using SecureMessenger.Core;
 
 namespace SecureMessenger.UI;
@@ -30,107 +30,110 @@ public class MessageHistory
     /// Create a MessageHistory with optional custom file path.
     /// Automatically loads existing history from file.
     ///
-    /// TODO: Implement the following:
-    /// 1. Store the history file path
-    /// 2. Call Load() to load existing history
     /// </summary>
     public MessageHistory(string historyFile = "message_history.json")
     {
-        throw new NotImplementedException("Implement constructor - see TODO in comments above");
+        _historyFile = historyFile;
+        Load();
     }
 
     /// <summary>
     /// Save a message to history and persist to file.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Lock on _lock for thread safety
-    /// 2. Add the message to _messages list
-    /// 3. Call PersistToFile() to save to disk
     /// </summary>
     public void SaveMessage(Message message)
     {
-        throw new NotImplementedException("Implement SaveMessage() - see TODO in comments above");
+        lock (_lock)
+        {
+            _messages.Add(message);
+            PersistToFile();
+        }
     }
 
     /// <summary>
     /// Load history from file on startup.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Check if the history file exists
-    /// 2. If it exists:
-    ///    a. Read the file contents as a string
-    ///    b. Deserialize from JSON to List<Message>
-    ///    c. Lock on _lock and replace _messages with loaded data
-    /// 3. Handle exceptions (file errors, JSON errors):
-    ///    a. Print error message but don't crash
-    ///    b. Start with empty history if load fails
-    ///
-    /// Hint: Use JsonSerializer.Deserialize<List<Message>>()
     /// </summary>
     public void Load()
     {
-        throw new NotImplementedException("Implement Load() - see TODO in comments above");
+        try
+        {
+            if (File.Exists(_historyFile))
+            {
+                var json = File.ReadAllText(_historyFile);
+                var messages = JsonSerializer.Deserialize<List<Message>>(json);
+                if (messages != null)
+                {
+                    lock (_lock)
+                    {
+                        _messages.Clear();
+                        _messages.AddRange(messages);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"History won't load ;() : {ex.Message}");
+        }
     }
 
     /// <summary>
     /// Write the current messages to the history file.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Serialize _messages to JSON
-    ///    - Use JsonSerializerOptions with WriteIndented = true for readability
-    /// 2. Write the JSON string to the history file
-    /// 3. Handle exceptions:
-    ///    a. Print error message but don't crash
-    ///
-    /// Note: This is called while holding _lock, so don't lock again
     /// </summary>
     private void PersistToFile()
     {
-        throw new NotImplementedException("Implement PersistToFile() - see TODO in comments above");
+        try
+        {
+            var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+            File.WriteAllText(_historyFile, json);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"History not saved ;() : {ex.Message}");
+        }
     }
 
     /// <summary>
-    /// Get messages from history.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Lock on _lock for thread safety
-    /// 2. Order messages by Timestamp descending (newest first)
-    /// 3. If limit is specified, take only that many messages
-    /// 4. Return as a new List (don't return the internal list)
-    ///
-    /// Hint: Use LINQ OrderByDescending, Take, and ToList
+    /// Get messages from history
     /// </summary>
     public IEnumerable<Message> GetHistory(int? limit = null)
     {
-        throw new NotImplementedException("Implement GetHistory() - see TODO in comments above");
+        lock (_lock)
+        {
+            var messages = _messages.OrderByDescending(m => m.Timestamp);
+            return limit.HasValue
+                ?messages.Take(limit.Value).ToList():messages.ToList();
+                //if message is good we add the limit, if not we just shove the msg on list
+        }
     }
 
     /// <summary>
     /// Display history to console.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Print a header: "--- Message History (last N messages) ---"
-    /// 2. Get history with the specified limit
-    /// 3. Reverse the order (so oldest is first, newest is last)
-    /// 4. Print each message using its ToString()
-    /// 5. Print a footer: "--- End of History ---"
     /// </summary>
     public void ShowHistory(int limit = 50)
     {
-        throw new NotImplementedException("Implement ShowHistory() - see TODO in comments above");
+        Console.WriteLine($"--- Message History (last N messages) ---");
+        foreach (var message in GetHistory(limit).Reverse())
+        {
+            Console.WriteLine(message.ToString);
+        }
+        Console.WriteLine($"--- End of History ---");
     }
 
     /// <summary>
     /// Clear all history from memory and disk.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Lock on _lock for thread safety
-    /// 2. Clear the _messages list
-    /// 3. Delete the history file if it exists
     /// </summary>
     public void Clear()
     {
-        throw new NotImplementedException("Implement Clear() - see TODO in comments above");
+        lock(_lock)
+        {
+            _messages.Clear();
+            if (File.Exists(_historyFile))
+            {
+                File.Delete(_historyFile);
+            }
+        }
     }
 }
-#pragma warning restore CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3

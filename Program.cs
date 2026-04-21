@@ -65,7 +65,7 @@ class Program
     private static CancellationTokenSource? cancellationTokenSource;
     private static HeartbeatMonitor? heartbeatMonitor;
 
-    //private static MessageHistory? messageHistory;   <--not implemented, will use later 
+    private static MessageHistory? messageHistory; 
 
     private static readonly ConcurrentDictionary<string, AesEncryption> peerAesEncryptions = new();
     private static readonly ConcurrentDictionary<string, byte[]> peerPublicKeys = new();
@@ -97,8 +97,8 @@ class Program
         consoleUI = new ConsoleUI();    // creates a console and put in the message guy
         tcpServer = new TcpServer();                  // TCP Server 
         tcpClientHandler = new TcpClientHandler();           //TCP client handler
+        messageHistory = new MessageHistory();
         heartbeatMonitor = new HeartbeatMonitor();
-        //messageHistory = new MessageHistory();
 
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
         // 2. TcpServer.OnMessageReceived - handle received messages
@@ -224,7 +224,7 @@ class Program
                     });
                     break;
                 case CommandType.History:
-                    Console.WriteLine("History isn't implemented yet");
+                    messageHistory.ShowHistory();
                     break;
                 case CommandType.Help:
                     consoleUI.ShowHelp();
