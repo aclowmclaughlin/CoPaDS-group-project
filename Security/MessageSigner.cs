@@ -46,7 +46,7 @@ public class MessageSigner
     /// <summary>
     /// Verify a message signature with the sender's public key.
     /// </summary>
-    public bool VerifyData(byte[] data, byte[] signature, byte[] publicKey)
+    public static bool VerifyData(byte[] data, byte[] signature, byte[] publicKey)
     {
         try
         {
