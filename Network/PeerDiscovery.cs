@@ -1,4 +1,3 @@
-#pragma warning disable CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
@@ -25,100 +24,114 @@ public class PeerDiscovery
     private UdpClient? _udpClient;
     private CancellationTokenSource? _cancellationTokenSource;
     private readonly ConcurrentDictionary<string, Peer> _knownPeers = new();
-    private readonly int _broadcastPort = 5001;
-    private Thread? _listenThread;
-    private Thread? _broadcastThread;
 
-    public event Action<Peer>? OnPeerDiscovered;
-    public event Action<Peer>? OnPeerLost;
+    private readonly HeartbeatMonitor heartbeatMonitor;
+    private readonly int _broadcastPort = 5001;
+    private Task? _listenTask;
+    private Task? _broadcastTask;
+
+    public event Action<Peer> OnPeerDiscovered;
 
     public int TcpPort { get; private set; }
-    public string LocalPeerId { get; } = Guid.NewGuid().ToString()[..8];
+    public string LocalPeerId { get; private set; }
+
+    private static readonly string PEER_MESSAGE_PREFIX = "PEER";
+
+
+    public PeerDiscovery(string ownId, HeartbeatMonitor heartbeatMonitor, Action<Peer> onPeerDiscovered)
+    {
+        LocalPeerId = ownId;
+        this.heartbeatMonitor = heartbeatMonitor;
+        this.OnPeerDiscovered += onPeerDiscovered;
+    }
 
     /// <summary>
     /// Start broadcasting presence and listening for other peers.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Store the TCP port
-    /// 2. Create a new CancellationTokenSource
-    /// 3. Create a UdpClient on the broadcast port
-    /// 4. Enable broadcast on the UDP client
-    /// 5. Create and start a thread for ListenLoop
-    /// 6. Create and start a thread for BroadcastLoop
-    /// 7. Start a background task for TimeoutCheckLoop
     /// </summary>
     public void Start(int tcpPort)
     {
-        throw new NotImplementedException("Implement Start() - see TODO in comments above");
+        TcpPort = tcpPort;
+        _cancellationTokenSource = new CancellationTokenSource();
+        _udpClient = new UdpClient(_broadcastPort)
+        {
+            EnableBroadcast = true
+        };
+        _listenTask = ListenLoop();
+        _broadcastTask = BroadcastLoop();
     }
 
     /// <summary>
     /// Periodically broadcast our presence to the network.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create an IPEndPoint for broadcast (IPAddress.Broadcast, _broadcastPort)
-    /// 2. Loop while cancellation not requested:
-    ///    a. Create discovery message: "PEER:{LocalPeerId}:{TcpPort}"
-    ///    b. Convert to bytes using UTF8 encoding
-    ///    c. Send via UDP client to the broadcast endpoint
-    ///    d. Handle SocketException (ignore broadcast errors)
-    ///    e. Sleep for 5 seconds between broadcasts
     /// </summary>
-    private void BroadcastLoop()
+    private async Task BroadcastLoop()
     {
-        throw new NotImplementedException("Implement BroadcastLoop() - see TODO in comments above");
+        IPEndPoint endPoint = new IPEndPoint(IPAddress.Broadcast, _broadcastPort);
+        CancellationToken cancellationToken = _cancellationTokenSource!.Token;
+        byte[] broadcastMessage = Encoding.UTF8.GetBytes($"{PEER_MESSAGE_PREFIX}:{LocalPeerId}:{TcpPort}");
+        while(!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                await _udpClient!.SendAsync(broadcastMessage, endPoint, cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
+            } 
+            catch (SocketException) {} 
+            catch(TaskCanceledException) {} 
+            catch (OperationCanceledException) {}
+        }
     }
 
     /// <summary>
     /// Listen for peer broadcast messages.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Create an IPEndPoint for receiving (IPAddress.Any, _broadcastPort)
-    /// 2. Loop while cancellation not requested:
-    ///    a. Receive data from UDP client (blocks until data available)
-    ///    b. Convert bytes to string using UTF8 encoding
-    ///    c. If message starts with "PEER:", call ProcessDiscoveryMessage
-    ///    d. Handle SocketException (ignore receive errors)
     /// </summary>
-    private void ListenLoop()
+    private async Task ListenLoop()
     {
-        throw new NotImplementedException("Implement ListenLoop() - see TODO in comments above");
+        CancellationToken cancellationToken = _cancellationTokenSource!.Token;
+        while(!cancellationToken.IsCancellationRequested)
+        {
+            try
+            {
+                // wait for message received
+                var result = await _udpClient!.ReceiveAsync(cancellationToken);
+
+                string message = Encoding.UTF8.GetString(result.Buffer);
+                if (message.StartsWith(PEER_MESSAGE_PREFIX))
+                {
+                    ProcessDiscoveryMessage(message, result.RemoteEndPoint.Address);
+                }
+            } 
+            catch(SocketException) {} 
+            catch(OperationCanceledException) {}
+        }
     }
 
     /// <summary>
     /// Parse a discovery message and add/update the peer.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Split the message by ':' - format is "PEER:peerId:port"
-    /// 2. Validate we have at least 3 parts
-    /// 3. Extract peerId (parts[1]) and port (parts[2])
-    /// 4. If peerId equals LocalPeerId, return (don't add ourselves)
-    /// 5. Create a Peer object with the extracted info and current timestamp
-    /// 6. Try to add to _knownPeers:
-    ///    - If new peer, invoke OnPeerDiscovered
-    ///    - If existing peer, update LastSeen timestamp
     /// </summary>
     private void ProcessDiscoveryMessage(string message, IPAddress senderAddress)
     {
-        throw new NotImplementedException("Implement ProcessDiscoveryMessage() - see TODO in comments above");
-    }
+        string[] split_message = message.Split(":");
+        // check that message is long enough
+        if (split_message.Length != 3) { return; }
+        string peerId = split_message[1];
+        int port = -1;
+        // try to parse the port part of the message into an int
+        if (!int.TryParse(split_message[2], out port)) { return; }
+        // if the message is from us, ignore it.
+        if (peerId == LocalPeerId) { return; }
 
-    /// <summary>
-    /// Periodically check for peers that have timed out (no broadcast in 30 seconds).
-    ///
-    /// TODO: Implement the following:
-    /// 1. Loop while cancellation not requested:
-    ///    a. Define timeout as 30 seconds
-    ///    b. Get current time
-    ///    c. Iterate through _knownPeers
-    ///    d. If (now - peer.LastSeen) > timeout:
-    ///       - Remove from _knownPeers
-    ///       - Invoke OnPeerLost
-    ///    e. Delay 5 seconds between checks
-    /// </summary>
-    private async Task TimeoutCheckLoop()
-    {
-        throw new NotImplementedException("Implement TimeoutCheckLoop() - see TODO in comments above");
+        // create a new Peer object
+        Peer this_peer = new Peer(){Port=port, Id=peerId};
+        
+        // check if peer has not been seen before
+        if(_knownPeers.TryAdd(peerId, this_peer))
+        {
+            OnPeerDiscovered!.Invoke(this_peer);
+        }
+
+        // Record that we did receive a heartbeat from the peer.
+        heartbeatMonitor.RecordHeartbeat(peerId);
+        
     }
 
     /// <summary>
@@ -131,15 +144,12 @@ public class PeerDiscovery
 
     /// <summary>
     /// Stop discovery.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Cancel the cancellation token
-    /// 2. Close the UDP client
-    /// 3. Wait for threads to finish (with timeout)
     /// </summary>
-    public void Stop()
+    public async Task Stop()
     {
-        throw new NotImplementedException("Implement Stop() - see TODO in comments above");
+        _cancellationTokenSource!.Cancel();
+        await _listenTask!;
+        await _broadcastTask!;
+        _udpClient!.Close();
     }
 }
-#pragma warning restore CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
