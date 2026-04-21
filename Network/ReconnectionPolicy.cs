@@ -43,51 +43,55 @@ public class ReconnectionPolicy
 
     /// <summary>
     /// Attempt to reconnect to a peer with exponential backoff.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Get current attempt count for this peer (default 0)
-    /// 2. Loop while attempt < MaxAttempts:
-    ///    a. Increment attempt count and store in _attemptCount
-    ///    b. Log reconnection attempt
-    ///    c. Invoke OnReconnectAttempt event
-    ///    d. Calculate delay using exponential backoff:
-    ///       delay = min(InitialDelayMs * 2^(attempt-1), MaxDelayMs)
-    ///    e. Try to connect using _clientHandler.ConnectAsync
-    ///    f. If successful:
-    ///       - Log success
-    ///       - Call ResetAttempts
-    ///       - Invoke OnReconnectSuccess
-    ///       - Return true
-    ///    g. If failed, log error and wait for calculated delay
-    /// 3. After max attempts, log failure, invoke OnReconnectFailed, return false
     /// </summary>
     public async Task<bool> TryReconnect(Peer peer)
     {
-        throw new NotImplementedException("Implement TryReconnect() - see TODO in comments above");
+        var peerId = peer.Id;
+        _attemptCount.TryGetValue(peerId, out int attempt);
+        while (attempt < MaxAttempts)
+        {
+            _attemptCount[peerId] = attempt + 1;
+            Console.WriteLine($"{attempt} reconnection attempt to {peerId}, {MaxAttempts - attempt} attempts left.");
+            OnReconnectAttempt?.Invoke(peerId, attempt);
+
+            var delay = Math.Min(InitialDelayMs * Math.Pow(2, attempt - 1), MaxDelayMs);
+            try
+            {
+                var connect = await _clientHandler.ConnectAsync(peer.Address!.ToString(), peer.Port);
+                if (connect)
+                {
+                    Console.WriteLine($"Connection to {peer.Id} successful");
+                    ResetAttempts(peerId);
+                    OnReconnectSuccess?.Invoke(peerId);
+                    return true;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error: {ex} \nRetry in {delay}ms");
+                await Task.Delay((int) delay);
+            }
+
+        }
+        Console.WriteLine($"Reconnection to {peerId} reached max attempts");
+        OnReconnectFailed?.Invoke(peerId);
+        return false;
     }
 
     /// <summary>
     /// Reset attempt count for a peer.
     /// Call this after a successful connection.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Remove the peer's entry from _attemptCount
     /// </summary>
     public void ResetAttempts(string peerId)
     {
-        throw new NotImplementedException("Implement ResetAttempts() - see TODO in comments above");
+        _attemptCount.TryRemove(peerId, out _);
     }
 
     /// <summary>
     /// Get current attempt count for a peer.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Try to get value from _attemptCount
-    /// 2. Return the count, or 0 if not found
     /// </summary>
     public int GetAttemptCount(string peerId)
     {
-        throw new NotImplementedException("Implement GetAttemptCount() - see TODO in comments above");
+        return _attemptCount.TryGetValue(peerId, out int attemptCount) ? attemptCount : 0;
     }
 }
-#pragma warning restore CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
