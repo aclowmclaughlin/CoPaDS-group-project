@@ -332,9 +332,13 @@ public class TcpPeerHandler
     /// <summary>
     /// Helper method for creating a Message object
     /// </summary>
-    public Message CreateMessage(string msg, MessageType type=MessageType.Chat)
+    public Message CreateMessage(string msg, MessageType type=MessageType.Chat, string? room_name = null)
     {
-        return new Message(){Content = msg, Type = type};
+        return new Message(){
+            Content = msg, 
+            Type = type, 
+            Room = room_name==null? string.Empty : room_name
+            };
     }
   
     /// <summary>
