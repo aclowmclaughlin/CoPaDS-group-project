@@ -429,7 +429,6 @@ public class TcpPeerHandler
         {
             Type                = unsignedMessage.Type,
             Sender              = unsignedMessage.Sender,
-            TargetPeerID        = unsignedMessage.TargetPeerID,
             Room                = unsignedMessage.Room,
             EncryptedContent    = unsignedMessage.EncryptedContent,
             Signature           = signature,
@@ -450,7 +449,6 @@ public class TcpPeerHandler
         {
             Type                = unsignedMessage.Type,
             Sender              = unsignedMessage.Sender,
-            TargetPeerID        = unsignedMessage.TargetPeerID,
             Room                = unsignedMessage.Room,
             Content             = unsignedMessage.Content,
             Signature           = signature,

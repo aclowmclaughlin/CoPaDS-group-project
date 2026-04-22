@@ -49,7 +49,6 @@ public class Peer
         {
             Type                = logicalMessage.Type,
             Sender              = logicalMessage.Sender,
-            TargetPeerID        = logicalMessage.TargetPeerID,
             Room                = logicalMessage.Room,
             EncryptedContent    = encryptedBytes,
             Signature           = logicalMessage.Signature,
@@ -102,7 +101,6 @@ public class Peer
             {
                 Type            = message.Type,
                 Sender          = message.Sender,
-                TargetPeerID    = message.TargetPeerID,
                 Room            = message.Room,
                 Content         = plaintext,
                 Timestamp       = message.Timestamp

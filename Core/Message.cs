@@ -25,6 +25,7 @@ public class Message
     public Guid Id { get; set; } = Guid.NewGuid();
     public MessageType Type { get; set; } = MessageType.Chat;
 
+    public string Sender { get; set; }          = string.Empty; // no longer need field?
     public string Room { get; set; }            = string.Empty;
 
     public string Content { get; set; } = string.Empty;
