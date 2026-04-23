@@ -43,7 +43,6 @@ public class ConsoleUI
         /leave #<room>       - Leaves the room with the specified room-id
         /rooms               - lists all rooms that are registers with the server
         /msg #<room> message - Send a message to the specified room
-        /tamper on|off       - Corrupt the next encrypted outgoing message for demo/testing
     """;
     public ConsoleUI() {}
 
@@ -127,9 +126,6 @@ public class ConsoleUI
                 break;
             case "/exit":
                 result.CommandType = CommandType.Exit;
-                break;
-            case "/tamper":
-                result.CommandType = CommandType.Tamper;
                 break;
             default:
                 result.CommandType = CommandType.Unknown;
