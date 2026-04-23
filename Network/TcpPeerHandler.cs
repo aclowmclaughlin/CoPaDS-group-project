@@ -3,6 +3,7 @@
 
 using System.Net;
 using System.Net.Sockets;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using SecureMessenger.Core;
@@ -311,8 +312,17 @@ public class TcpPeerHandler
 
                 if (!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
                     peer.Name = message.Sender;
+                
+                Message? decryptedMessage;
+                bool messageVerified = peer.TryVerifyAndDecrypt(message, out decryptedMessage);
 
-                OnMessageReceived?.Invoke(peer, message);
+                if (!messageVerified)
+                {
+                    Console.WriteLine($"Failed to verify message from peer: {peer}");
+                } else
+                {
+                    OnMessageReceived?.Invoke(peer, decryptedMessage!);
+                }
             }
         }
         catch (IOException IOE) when (peer.IsConnected){
