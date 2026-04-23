@@ -466,7 +466,40 @@ public class TcpPeerHandler
         };
     }
 
+    public void Disconnect(string peerId)
+    {
+        lock (_connections_lock)
+        {
+            Peer? peer;
+            if (_connections.TryGetValue(peerId, out peer))
+            {
+                DisconnectPeer(peer);
+            } else
+            {
+                Console.WriteLine($"Tried to disconnect {peerId} but it does not exist.");
+            }
+        }
+    }
 
+    public void ListPeers()
+    {
+        List<Peer> peers_list;
+        lock (_connections_lock)
+        {
+            peers_list = _connections.Values.ToList();
+        }
+        if (peers_list == null || peers_list.Count == 0)
+        {
+            Console.WriteLine("No Known Peers.");
+            return;
+        }
+        int i = 0;
+        foreach(Peer peer in peers_list)
+        {
+            Console.WriteLine($"Peer [{i}]: {peer}");
+            i++;
+        }
+    }
 
     /// <summary>
     /// Clean up a disconnected peer.
