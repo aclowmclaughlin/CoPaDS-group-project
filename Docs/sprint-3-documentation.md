@@ -13,14 +13,18 @@
 
 ---
 
+**Github** 
+https://github.com/aclowmclaughlin/CoPaDS-group-project
+
 ## Build & Run Instructions
+Build and run instructions remain the same as Sprint 1.
 
 ### Prerequisites
-- [List all required software]
+- .NET SDK version
 
 ### Building
 ```
-[Commands to build]
+dotnet build
 ```
 
 ### Running
@@ -44,8 +48,13 @@
 | `/peers` | List known peers | `/peers` |
 | `/history` | View message history | `/history` |
 | `/quit` | Exit application | `/quit` |
-| | | |
-
+| `/help` | Show Help Message | |
+| `/exit` | End current Session | |
+| `/create #<room>` | Creates a room | `/create #test` |
+| `/rooms` | Lists available rooms | `/rooms` |
+| `join #<room>` | Join a room | `join #test` |
+| `/msg #<room> message` | Sends message into room specified | `/msg #test hello world ` |
+| `/leave #<room>` | leave room specified | `/leave #test` |
 ---
 
 ## Architecture Diagram
@@ -143,13 +152,13 @@ Peer A                          Peer B
 ## Message History
 
 ### Storage Format
-[Describe how messages are stored locally]
+The meessage gets read in, serialized, then added into the history file.
 
 ### File Location
-[Where is history stored?]
+Hisotry is stored within message_history.json
 
 ### History Commands
-[How users interact with history]
+Users can use /history to access the last 50 messages in the file.
 
 ---
 
