@@ -4,6 +4,7 @@
 using System.Net;
 using System.Net.Sockets;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Swift;
 using System.Text;
 using System.Text.Json;
 using SecureMessenger.Core;
@@ -19,12 +20,16 @@ public class TcpPeerHandler
     private TcpListener? _listener;
     private readonly Dictionary<string, Peer> _connections = new();
 
+    public string localUserName = string.Empty;
+
     private readonly object _connections_lock = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Thread? _listenThread;
 
     private readonly Dictionary<string, List<Peer>> _rooms = new();
     private object _roomsLock = new();
+
+    private readonly List<string> _our_rooms = new(); // Keeps a list of the rooms we are in
 
     private RsaEncryption ourRSA = new RsaEncryption();
     private MessageSigner ourMessageSigner;
@@ -345,10 +350,24 @@ public class TcpPeerHandler
     public Message CreateMessage(string msg, MessageType type=MessageType.Chat, string? room_name = null)
     {
         return new Message(){
+            Sender= localUserName,
             Content = msg, 
             Type = type, 
             Room = room_name==null? string.Empty : room_name
-            };
+        };
+    }
+
+    public Message CreateRoomsListingMessage()
+    {
+        //TODO implement this- should create some string representation
+        // of the _our_rooms variable
+    }
+
+    public bool HandleRoomsListingMessage(Message roomsListingMessage, Peer senderPeer)
+    {
+        //TODO implement this- should unpack the string representation
+        // of the Room Listing Message, and add the sender Peer to all the
+        // rooms it says it is in.
     }
   
     /// <summary>
@@ -359,7 +378,7 @@ public class TcpPeerHandler
     /// The return value probably doesn't matter in 99% of circumstances
     /// and can be generally ignored.
     /// </summary>
-    /// <param name="roomName">The name of thee room</param>
+    /// <param name="roomName">The name of the room</param>
     /// <param name="message">The message to send</param>
     /// <returns>If the message was sent to everyone in the room.</returns>
     public async Task<bool> SendToRoom(string roomName, Message message)

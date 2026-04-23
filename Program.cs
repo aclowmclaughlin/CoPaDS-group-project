@@ -55,11 +55,10 @@ namespace SecureMessenger;
 /// </summary>
 class Program
 {
-    // Examples:
-
     // creates objects for all the items used below
-    private static MessageQueue? serverMessageQueue;
-    private static MessageQueue? clientMessageQueue;
+    private static MessageQueue? messageQueue;
+    private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
+
     private static TcpPeerHandler? tcpPeerHandler;
     private static ConsoleUI? consoleUI;
     private static CancellationTokenSource? cancellationTokenSource;
@@ -67,7 +66,6 @@ class Program
 
     private static MessageHistory? messageHistory; 
 
-    private static readonly string localUserName = $"{Dns.GetHostName()}-{Environment.ProcessId}";
     
     private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
 
@@ -84,10 +82,9 @@ class Program
         // 5. Create TcpClientHandler for outgoing connections          X
 
         cancellationTokenSource = new CancellationTokenSource();
-        serverMessageQueue = new MessageQueue();         //creates message queue guy
-        clientMessageQueue = new MessageQueue();
+        messageQueue = new MessageQueue();         //creates message queue guy
         consoleUI = new ConsoleUI();    // creates a console and put in the message guy
-        tcpPeerHandler = new TcpPeerHandler();
+        tcpPeerHandler = new TcpPeerHandler(){localUserName = localUserName};
         messageHistory = new MessageHistory();
         heartbeatMonitor = new HeartbeatMonitor();
 
@@ -96,7 +93,7 @@ class Program
         // 3. TcpServer.OnPeerDisconnected - handle disconnections
         // 4. TcpClientHandler events (same pattern)
 
-        tcpPeerHandler.OnPeerConnected += HandlerPeerConnected;
+        tcpPeerHandler.OnPeerConnected += HandlePeerConnected;
         tcpPeerHandler.OnMessageReceived += HandleMessageReceived;
         tcpPeerHandler.OnPeerDisconnected += peer =>
             Console.WriteLine("Disconnected peer " + peer.Id);
@@ -123,8 +120,8 @@ class Program
         // Note: TcpServer.Start() will create its own listen thread
         List<Task> tasklist =
         [
-            Task.Run(ProcessClientIncomingMessages),  // pcim
-            Task.Run(SendClientOutgoingMessages),     // scom
+            Task.Run(ProcessIncomingMessages),  // pcim
+            Task.Run(SendOutgoingMessages),     // scom
         ];
 
 
@@ -203,7 +200,7 @@ class Program
                     {
                         string room_name = resulty.Args[1];
                         // create the room
-                        clientMessageQueue!.EnqueueOutgoing(new Message
+                        messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.CreateRoom,
                             Sender = localUserName,
@@ -222,7 +219,7 @@ class Program
                     {
                         string room_name = resulty.Args[1];
                         // join the room
-                        clientMessageQueue!.EnqueueOutgoing(new Message
+                        messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.JoinRoom,
                             Sender = localUserName,
@@ -241,7 +238,7 @@ class Program
                     {
                         string room_name = resulty.Args[1];
                         // leave the room
-                        clientMessageQueue!.EnqueueOutgoing(new Message
+                        messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.LeaveRoom,
                             Sender = localUserName,
@@ -275,10 +272,21 @@ class Program
                     {
                         string room_name = resulty.Args[1];
                         string message = string.Join(" ", resulty.Args.Skip(2)); // Send all words after room number arg
-                        var succeeded = await tcpPeerHandler.SendToRoom(room_name, tcpPeerHandler.CreateMessage(message, MessageType.RoomChat, room_name));
 
-                        if(!succeeded)
-                            Console.WriteLine("Failed to send to room!");
+                        List<Peer>? peers = tcpPeerHandler.GetPeersInRoom(room_name);
+                        if (peers == null)
+                        {
+                            Console.WriteLine($"No Peers in room {room_name}");
+                        } else
+                        {
+                            // add each one separately to the queue.
+                            foreach (Peer peer in peers)
+                            {
+                                messageQueue!.EnqueueOutgoing(
+                                    tcpPeerHandler.CreateMessage(message, 
+                                    MessageType.RoomChat, room_name));
+                            }
+                        }
                     }
                     break;
                 case CommandType.Exit:
@@ -304,400 +312,61 @@ class Program
         cancellationTokenSource!.Cancel();
 
         tcpPeerHandler?.Stop();
-        clientMessageQueue?.CompleteAdding();
-        serverMessageQueue?.CompleteAdding();
+        messageQueue?.CompleteAdding();
 
         Task.WaitAll(tasklist);
         Console.WriteLine("Goodbye!");
     }
-
-    private static void HandleServerMessageReceived(Peer peer, Message message)
+    private static void HandlePeerConnected(Peer peer)
     {
-        if(!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
-        {
-            peer.Name = message.Sender;
-            // Console.WriteLine($"[server] Registered client name {peer.Name} for socket {peer.Id}");
-        }
-
-        // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE
-        // OF THE SERVER MESSAGE QUEUE
-        switch(message.Type)
-        {
-            case MessageType.RoomChat:
-            case MessageType.PublicKey:
-            case MessageType.SessionKey:
-            case MessageType.Chat:
-            {
-                string forwardingName = message.TargetPeerID;
-                Peer? destPeer = tcpServer!.GetPeerByName(forwardingName);
-
-                if(destPeer == null)
-                {
-                    Console.WriteLine($"[server] DROP {message.Type} from {message.Sender} -> {forwardingName}: destination not connected");
-                    break;
-                }
-
-                Message forwardedMessage = new Message
-                {
-                    Id = message.Id,
-                    Type = message.Type,
-                    Sender = message.Sender,
-                    TargetPeerID = message.TargetPeerID,
-                    Room = message.Room,
-                    Content = message.Content,
-                    EncryptedContent = message.EncryptedContent,
-                    Signature = message.Signature,
-                    PublicKey = message.PublicKey,
-                    EncryptedSessionKey = message.EncryptedSessionKey,
-                    Timestamp = message.Timestamp
-                };
-
-                if (message.Type == MessageType.Chat || message.Type == MessageType.RoomChat)
-                {
-                    Console.WriteLine($"[demo] Server forwarding encrypted chat from {message.Sender} to {message.TargetPeerID}");
-                    Console.WriteLine($"[demo] Server sees ciphertext bytes={message.EncryptedContent?.Length ?? 0}, plaintext field length={message.Content?.Length ?? 0}");
-                }
-
-                // Attach public key to message
-                if((message.Type == MessageType.Chat || message.Type == MessageType.RoomChat) && peer.PublicKey != null)
-                {
-                    forwardedMessage.PublicKey = peer.PublicKey;
-                    Console.WriteLine($"[server] Attached long-term public key for {message.Sender} to {message.Type}");
-                }
-
-                Console.WriteLine($"[server] ROUTE {message.Type} from {message.Sender} -> {forwardingName}");
-                serverMessageQueue!.EnqueueOutgoing(forwardedMessage);
-                break;
-            }
-            // server commands!
-            case MessageType.ListPeers:
-                {
-                    var peersList = tcpServer!.GetConnectedPeers()
-                        .Where(connectedPeer => !string.IsNullOrWhiteSpace(connectedPeer.Name))
-                        .OrderBy(connectedPeer => connectedPeer.Name == peer.Name ? 0 : 1)
-                        .ThenBy(connectedPeer => connectedPeer.Name)
-                        .Select(connectedPeer =>
-                        {
-                            string rooms = string.Join(";", tcpServer.GetRoomsForPeer(connectedPeer));
-                            return $"{connectedPeer.Name}|{rooms}";
-                        })
-                        .Distinct()
-                        .ToList();
-
-                    Console.WriteLine($"[server] Handling ListPeers for {peer.Name}. Found: {string.Join(", ", peersList)}");
-
-                    Message responseMessage = new Message
-                    {
-                        Type = MessageType.ListPeersReply,
-                        Sender = "SERVER",
-                        TargetPeerID = peer.Name,
-                        Content = string.Join(",", peersList)
-                    };
-
-                    serverMessageQueue!.EnqueueOutgoing(responseMessage);
-                }                
-                break;
-            case MessageType.ListRooms:
-                {
-                    // the list rooms message has contents that are just a list of rooms in the form:
-                    // room_id1,room_id2,room_id3
-                    var rooms_list = tcpServer!.ListRooms();
-                    string rooms_list_str = string.Join(",", rooms_list);
-                    Message response_message = new Message
-                    {
-                        Type = MessageType.ListRoomsReply,
-                        Sender = "SERVER",
-                        TargetPeerID = peer.Name,
-                        Content = rooms_list_str
-                    };
-                    serverMessageQueue!.EnqueueOutgoing(response_message);
-                }
-                break;
-            case MessageType.CreateRoom:
-                {
-                    string room_name = message.Room;
-                    bool alreadyExists = tcpServer!.CreateRoom(room_name);
-
-                    Message responseMessage = new Message
-                    {
-                        Type = MessageType.ServerNotice,
-                        Sender = "SERVER",
-                        TargetPeerID = peer.Name,
-                        Content = alreadyExists
-                            ? $"Room {room_name} already exists."
-                            : $"Room {room_name} created."
-                    };
-
-                    serverMessageQueue!.EnqueueOutgoing(responseMessage);
-                }
-                break;
-            case MessageType.LeaveRoom:
-                {
-                    string room_name = message.Room;
-                    bool removed = tcpServer!.RemoveFromRoom(room_name, peer);
-
-                    Message responseMessage = new Message
-                    {
-                        Type = MessageType.ServerNotice,
-                        Sender = "SERVER",
-                        TargetPeerID = peer.Name,
-                        Content = removed
-                            ? $"Left room {room_name}."
-                            : $"Room {room_name} does not exist."
-                    };
-
-                    serverMessageQueue!.EnqueueOutgoing(responseMessage);
-                }
-                break;
-            case MessageType.ListPeersInRoom:
-                {
-                    // the listPeersInRoom message has contents that are
-                    // peer_id:PublicKey,peer_id:PublicKey,...
-                    string room_name = message.Room;
-                    var peers_list = tcpServer!.GetPeersInRoom(room_name);
-                    if(peers_list == null)
-                    {
-                        Message emptyRoomResponse = new Message
-                        {
-                            Type = MessageType.ListPeersInRoomReply,
-                            Sender = "SERVER",
-                            TargetPeerID = peer.Name,
-                            Room = room_name,
-                            Content = string.Empty
-                        };
-
-                        serverMessageQueue!.EnqueueOutgoing(emptyRoomResponse);
-                        break;
-                    }
-                    List<string> peerEntries = new();
-                    foreach(Peer otherPeer in peers_list)
-                    {
-                        if(string.IsNullOrWhiteSpace(otherPeer.Name) || otherPeer.PublicKey == null)
-                            continue;
-
-                        peerEntries.Add($"{otherPeer.Name}:{Convert.ToBase64String(otherPeer.PublicKey)}");
-                    }
-                    
-                    string replyContent = string.Join(",", peerEntries);
-                    Console.WriteLine($"[server] ListPeersInRoom for {peer.Name} in {room_name}: {peerEntries.Count} peer key(s)");
-
-                    Message response_message = new Message
-                    {
-                        Type = MessageType.ListPeersInRoomReply,
-                        Sender = "SERVER",
-                        TargetPeerID = peer.Name,
-                        Room = room_name,
-                        Content = replyContent
-                    };
-
-                    serverMessageQueue!.EnqueueOutgoing(response_message);
-                }
-                break;
-            case MessageType.JoinRoom:
-                {
-                    string roomName = message.Room;
-                    bool joined = tcpServer!.AddToRoom(roomName, peer);
-
-                    Console.WriteLine($"[server] JoinRoom from {peer.Name} for {roomName}. Success={joined}");
-
-                    Message responseMessage = new Message
-                    {
-                        Type = MessageType.ServerNotice,
-                        Sender = "SERVER",
-                        TargetPeerID = peer.Name,
-                        Content = joined
-                            ? $"Joined room {roomName}."
-                            : $"Room {roomName} does not exist."
-                    };
-
-                    serverMessageQueue!.EnqueueOutgoing(responseMessage);
-                }
-                break;
-        }
+        Console.WriteLine($"Connected to Peer {peer}");
+        //TODO add the peer to the heartbeat monitor??
     }
 
-    private static void HandleServerPeerConnected(Peer peer)
+    private static void HandleMessageReceived(Peer peer, Message message)
     {
-        Console.WriteLine($"[server] Peer {peer.Id} connected from {peer.Address}:{peer.Port}");
-    }
+        // ANY MESSAGES TO DISPLAY MUST BE ADDED 
+        // TO THE INCOMING QUEUE OF THE CLIENT MESSAGE QUEUE
 
-    private static void HandleClientPeerConnected(Peer peer)
-    {
-        Console.WriteLine($"Connected to server at {peer.Address}, {peer.Port}");
-    }
-
-    private static void HandleClientMessageReceived(Peer peer, Message message)
-    {
-        //TODO fix this
-        // ANY MESSAGES TO DISPLAY MUST BE ADDED TO THE INCOMING QUEUE OF THE CLIENT MESSAGE QUEUE
-        if(!string.IsNullOrWhiteSpace(message.TargetPeerID) && message.TargetPeerID != localUserName)
-        {
-            // This message was not for us!! Ignore it.
-            return;
-        }
+        // Note that all messages received this way are already decoded.
         switch(message.Type) // Handle messages differently based on message type
         {
-            case MessageType.PublicKey:
-                HandlePublicKeyMessage(peer, message);
-                break;
-
-            case MessageType.SessionKey:
-                HandleSessionKeyMessage(peer, message);
-                break;
-
             case MessageType.RoomChat:
+                //todo check if we are in the room (need to implement our_rooms)
+                // first
+                if ()
+                {
+                    messageQueue!.EnqueueIncoming(message);
+                }
+                break;
             case MessageType.Chat:
-                HandleEncryptedChatMessage(message);
+                messageQueue!.EnqueueIncoming(message);
                 break;
-            
-            case MessageType.ListRoomsReply:
-                {
-                    string[] room_names = message.Content
-                        .Split(",", StringSplitOptions.RemoveEmptyEntries);
-
-                    string display = room_names.Length == 0
-                        ? "(no rooms)"
-                        : string.Join(", ", room_names);
-
-                    clientMessageQueue!.EnqueueIncoming(new Message
-                    {
-                        Type = MessageType.ServerNotice,
-                        Sender = "SERVER",
-                        TargetPeerID = localUserName,
-                        Content = $"Rooms: {display}"
-                    });
-                    break;
-                }
-            case MessageType.ListPeersReply:
-                {
-                    string[] peerEntries = message.Content
-                        .Split(",", StringSplitOptions.RemoveEmptyEntries);
-
-                    if (peerEntries.Length == 0)
-                    {
-                        clientMessageQueue!.EnqueueIncoming(new Message
-                        {
-                            Type = MessageType.ServerNotice,
-                            Sender = "SERVER",
-                            TargetPeerID = localUserName,
-                            Content = "Peers: (none)"
-                        });
-                        break;
-                    }
-
-                    List<string> lines = new();
-
-                    foreach (string peerEntry in peerEntries)
-                    {
-                        string[] split = peerEntry.Split("|", 2);
-                        string peerName = split[0];
-                        string roomsRaw = split.Length > 1 ? split[1] : string.Empty;
-
-                        string roomsDisplay = string.IsNullOrWhiteSpace(roomsRaw)
-                            ? "none"
-                            : string.Join(", ", roomsRaw.Split(";", StringSplitOptions.RemoveEmptyEntries));
-
-                        string prefix = peerName == localUserName ? "You" : "Peer";
-                        lines.Add($"\t- {prefix}: {peerName} (rooms: {roomsDisplay})");
-                    }
-                    lines.Insert(0, "Peers:");
-
-                    clientMessageQueue!.EnqueueIncoming(new Message
-                    {
-                        Type = MessageType.ServerNotice,
-                        Sender = "SERVER",
-                        TargetPeerID = localUserName,
-                        Content = string.Join(Environment.NewLine, lines)
-                    });
-
-                    break;
-                }
-            case MessageType.ListPeersInRoomReply:
-                {
-                    string room_name = message.Room;
-                    Dictionary<string, byte[]> peerKeys = new();
-
-                    if(!string.IsNullOrWhiteSpace(message.Content))
-                    {
-                        string[] peersAndKeys = message.Content.Split(",", StringSplitOptions.RemoveEmptyEntries);
-
-                        foreach(string peerAndKey in peersAndKeys)
-                        {
-                            string[] split = peerAndKey.Split(":", 2);
-                            if(split.Length != 2)
-                            {
-                                continue;
-                            }
-
-                            string name = split[0];
-                            byte[] keyBytes = Convert.FromBase64String(split[1]);
-                            peerKeys[name] = keyBytes;
-                        }
-                    }
-
-                    if(pendingRoomPeerLists.TryRemove(room_name, out var pendingRoomPeerList))
-                        pendingRoomPeerList.TrySetResult(peerKeys);
-
-                    break;
-                }
-
-            case MessageType.ServerNotice:
-                clientMessageQueue!.EnqueueIncoming(message);
+            case MessageType.JoinRoom:
+                tcpPeerHandler!.AddToRoom(message.Room, peer);
                 break;
-
+            case MessageType.RoomsListing:
+                tcpPeerHandler!.HandleRoomsListingMessage(message, peer);
+                break;
             case MessageType.CreateRoom:
-            case MessageType.ListRooms:
+                tcpPeerHandler!.CreateRoom(message.Room);
+                break;
             case MessageType.LeaveRoom:
-            case MessageType.ListPeers:
-            case MessageType.ListPeersInRoom:
-                //server messages- don't do anything.
-                Console.WriteLine("Got message intended for a server.");
+                tcpPeerHandler!.RemoveFromRoom(message.Room, peer);
                 break;
             default:
-                clientMessageQueue!.EnqueueIncoming(message);
+                Console.WriteLine($"Got message: {message} of unrecognized type.");
                 break;
         }
     }
 
-    private static async Task SendServerOutgoingMessages()
-    {
-        while(!cancellationTokenSource!.Token.IsCancellationRequested)
-        {
-            Message? msg;
-            try
-            {
-                msg = serverMessageQueue!.DequeueOutgoing();
-            }
-            catch(InvalidOperationException)
-            {
-                break;
-            }
-
-            if(msg == null || tcpServer == null)
-                continue;
-
-            if(string.IsNullOrWhiteSpace(msg.TargetPeerID))
-                continue;
-
-            Peer? destinationPeer = tcpServer.GetPeerByName(msg.TargetPeerID);
-            if(destinationPeer == null)
-            {
-                Console.WriteLine($"Unable to deliver message to {msg.TargetPeerID}");
-                continue;
-            }
-
-            Console.WriteLine($"[server] SEND {msg.Type} to {msg.TargetPeerID}");
-            await tcpServer.SendToPeerAsync(destinationPeer, msg);
-        }
-    }
-
-    private static Task ProcessClientIncomingMessages()
+    private static Task ProcessIncomingMessages()
     {
         while(!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
         {
             try
             {
-                var msg = clientMessageQueue!.DequeueIncoming(); //dequeue
+                var msg = messageQueue!.DequeueIncoming(); //dequeue
                 if(msg != null)
                 {
                     consoleUI?.DisplayMessage(msg);
@@ -709,14 +378,15 @@ class Program
         return Task.CompletedTask;
     }
 
-    private static async Task SendClientOutgoingMessages()
+    private static async Task SendOutgoingMessages()
     {
+        //TODO fix this logic.
         while(!cancellationTokenSource!.Token.IsCancellationRequested)
         {
             Message? logicalMessage;
             try
             {
-                logicalMessage = clientMessageQueue!.DequeueOutgoing();
+                logicalMessage = messageQueue!.DequeueOutgoing();
             }
             catch(InvalidOperationException) { break; }
 
