@@ -2,14 +2,10 @@
 // CSCI 251 - Secure Distributed Messenger
 // Group Project
 
-using System.Security.Cryptography;
-using System.Collections.Concurrent;
 using System.Net;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
-using SecureMessenger.Security;
 using SecureMessenger.UI;
-using System.ComponentModel.DataAnnotations;
 
 
 namespace SecureMessenger;
