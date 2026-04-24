@@ -21,7 +21,8 @@ public enum MessageType
 }
 
 /// <summary>
-/// Represents a message in the system
+/// Represents a chat, room, heartbeat, or control message exchanged between peers.
+/// Messages may contain plaintext content before sending or encrypted content and a signature while in transit.
 /// </summary>
 public class Message
 {

@@ -13,12 +13,7 @@ public enum SendResult
 }
 
 /// <summary>
-/// Sprint 3: Heartbeat monitoring for connection health.
-/// Detects failed connections by tracking when heartbeats were last received.
-///
-/// Configuration:
-/// - Heartbeat interval: 5 seconds (how often to send heartbeats)
-/// - Timeout: 15 seconds (how long without heartbeat before considered failed)
+/// Tracks heartbeat timestamps for active TCP peer connections and raises events when peers time out.
 /// </summary>
 public class HeartbeatMonitor
 {
@@ -96,7 +91,7 @@ public class HeartbeatMonitor
 
                 if (elapsed > _timeout)
                 {
-                    // TcpClientHandler prints clean timeout message
+                    // TcpPeerHandler prints clean timeout message
                     StopMonitoring(entry.Key);
                     OnConnectionFailed?.Invoke(entry.Key);
                 }

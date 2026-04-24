@@ -9,7 +9,7 @@ using SecureMessenger.Security;
 namespace SecureMessenger.Core;
 
 /// <summary>
-/// Represents a connected peer in the network
+/// Stores connection, identity, encryption, and send-synchronization state for one connected peer.
 /// </summary>
 public class Peer
 {
@@ -17,7 +17,6 @@ public class Peer
     public string Name { get; set; } = string.Empty;
     public IPAddress? Address { get; set; }
     public int Port { get; set; }
-    // public DateTime LastSeen { get; set; } = DateTime.Now;
     public bool IsConnected { get; set; }
 
     // Network connection

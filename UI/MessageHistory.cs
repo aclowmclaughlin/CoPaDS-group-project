@@ -7,17 +7,7 @@ using SecureMessenger.Core;
 namespace SecureMessenger.UI;
 
 /// <summary>
-/// Sprint 3: Message history storage and retrieval.
-/// Persists messages to a JSON file for retrieval across sessions.
-///
-/// Features:
-/// - Thread-safe message storage
-/// - JSON serialization/deserialization
-/// - Automatic loading on startup
-/// - Configurable history display limit
-///
-/// File Format: JSON array of Message objects
-/// Default file: "message_history.json"
+/// Saves, loads, displays, and clears local file-based message history for the peer.
 /// </summary>
 public class MessageHistory
 {

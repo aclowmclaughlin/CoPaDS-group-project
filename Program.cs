@@ -12,43 +12,8 @@ using SecureMessenger.UI;
 namespace SecureMessenger;
 
 /// <summary>
-/// Main entry point for the Secure Distributed Messenger.
-///
-/// Architecture Overview:
-/// This application uses multiple threads to handle concurrent operations:
-///
-/// 1. Main Thread (UI Thread)
-///    - Reads user input from console
-///    - Parses commands using ConsoleUI
-///    - Dispatches commands to appropriate handlers
-///
-/// 2. Listen Thread (Server)
-///    - Runs TcpServer to accept incoming connections
-///    - Each accepted connection spawns a receive thread
-///
-/// 3. Receive Thread(s)
-///    - One per connected peer
-///    - Reads messages from network
-///    - Enqueues to incoming message queue
-///
-/// 4. Send Thread
-///    - Dequeues from outgoing message queue
-///    - Sends messages to connected peers
-///
-/// 5. Process Thread (Optional)
-///    - Dequeues from incoming message queue
-///    - Displays messages to user
-///    - Handles decryption and verification
-///
-/// Thread Communication:
-/// - Use MessageQueue for thread-safe message passing
-/// - Use CancellationToken for graceful shutdown
-/// - Use events for peer connection/disconnection notifications
-///
-/// Sprint Progression:
-/// - Sprint 1: Basic threading and networking (connect, send, receive)
-/// - Sprint 2: Add encryption (key exchange, AES encryption, signing)
-/// - Sprint 3: Add resilience (peer discovery, heartbeat, reconnection)
+/// Coordinates application startup, service initialization, command handling,
+/// background message processing, automatic listening, and graceful shutdown.
 /// </summary>
 class Program
 {
@@ -74,22 +39,11 @@ class Program
         Console.WriteLine("| Secure Distributed Messenger |");
         Console.WriteLine("================================");
 
-        // 1. Create CancellationTokenSource for shutdown signaling     X
-        // 2. Create MessageQueue for thread communication              X
-        // 3. Create ConsoleUI for user interface                       X
-        // 4. Create TcpServer for incoming connections                 X
-        // 5. Create TcpClientHandler for outgoing connections          X
-
         cancellationTokenSource = new CancellationTokenSource();
-        messageQueue = new MessageQueue();         //creates message queue guy
-        consoleUI = new ConsoleUI();    // creates a console and put in the message guy
+        messageQueue = new MessageQueue();          // creates message queue guy
+        consoleUI = new ConsoleUI();                // creates a console and put in the message guy
         tcpPeerHandler = new TcpPeerHandler(){localUserName = localUserName};
         messageHistory = new MessageHistory();
-
-        // 1. TcpServer.OnPeerConnected - handle new incoming connections
-        // 2. TcpServer.OnMessageReceived - handle received messages
-        // 3. TcpServer.OnPeerDisconnected - handle disconnections
-        // 4. TcpClientHandler events (same pattern)
 
         tcpPeerHandler.OnPeerConnected += HandlePeerConnected;
         tcpPeerHandler.OnMessageReceived += HandleMessageReceived;

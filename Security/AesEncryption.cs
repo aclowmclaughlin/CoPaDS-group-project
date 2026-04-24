@@ -1,23 +1,13 @@
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
-using System.Data.SqlTypes;
 using System.Security.Cryptography;
 using System.Text;
 
 namespace SecureMessenger.Security;
 
 /// <summary>
-/// Sprint 2: AES encryption for message content.
-/// Uses AES-256-CBC with random IV for each message.
-///
-/// AES-256 Configuration:
-/// - Key size: 256 bits (32 bytes)
-/// - Block size: 128 bits (16 bytes)
-/// - Mode: CBC (Cipher Block Chaining)
-/// - IV: Random 16 bytes, prepended to ciphertext
-///
-/// Wire format: [IV (16 bytes)][Ciphertext (variable length)]
+/// Encrypts and decrypts message content with AES-256-CBC using a per-connection session key.
 /// </summary>
 public class AesEncryption
 {

@@ -6,17 +6,7 @@ using SecureMessenger.Core;
 namespace SecureMessenger.UI;
 
 /// <summary>
-/// Console-based user interface.
-/// Handles user input parsing and message display.
-///
-/// Supported Commands:
-/// - /connect <ip> <port>  - Connect to a peer
-/// - /listen <port>        - Start listening for connections
-/// - /peers                - List known peers
-/// - /history              - View message history
-/// - /quit                 - Exit the application
-/// - /exit                 - End current session
-/// - Any other text        - Send as a message
+/// Parses console commands, displays messages, and shows command help for the text-based user interface.
 /// </summary>
 public class ConsoleUI
 {
@@ -153,7 +143,7 @@ public enum CommandType
 }
 
 /// <summary>
-/// Result of parsing a user input line
+/// Stores the parsed result of a console input line, including command type, arguments, and message text.
 /// </summary>
 public class CommandResult
 {

@@ -11,7 +11,8 @@ using SecureMessenger.Security;
 namespace SecureMessenger.Network;
 
 /// <summary>
-/// Handles incoming and outgoing TCP connections from and to other peers.
+/// Manages P2P TCP listening, outgoing connections, key exchange, encrypted message sending,
+/// receive loops, heartbeat monitoring, reconnection, and room membership state.
 /// </summary>
 public class TcpPeerHandler
 {

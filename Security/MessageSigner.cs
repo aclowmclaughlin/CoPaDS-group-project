@@ -6,17 +6,7 @@ using System.Security.Cryptography;
 namespace SecureMessenger.Security;
 
 /// <summary>
-/// Sprint 2: Message signing and verification.
-/// Uses RSA with SHA-256 for digital signatures.
-///
-/// Digital Signature Configuration:
-/// - Algorithm: RSA with SHA-256
-/// - Padding: PKCS#1 v1.5 (RSASignaturePadding.Pkcs1)
-///
-/// Purpose:
-/// - Signing proves the message came from the claimed sender
-/// - Verification detects if the message was tampered with
-/// - Reject any message with an invalid signature
+/// Signs outgoing message data and verifies incoming message signatures using RSA with SHA-256.
 /// </summary>
 public class MessageSigner
 {

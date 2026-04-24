@@ -6,20 +6,8 @@ using System.Collections.Concurrent;
 namespace SecureMessenger.Core;
 
 /// <summary>
-/// Thread-safe message queue for incoming/outgoing messages.
-///
-/// This class implements the Producer/Consumer pattern:
-/// - Producers add messages to the queue (network threads, UI thread)
-/// - Consumers take messages from the queue (processing threads, send threads)
-///
-/// Thread Safety Options:
-/// 1. BlockingCollection<T> - recommended, handles blocking and thread safety
-/// 2. ConcurrentQueue<T> with manual synchronization
-/// 3. Queue<T> with explicit locking
-///
-/// The blocking behavior is important:
-/// - Take() should block when the queue is empty
-/// - This allows consumer threads to wait efficiently without busy-waiting
+/// Provides thread-safe incoming and outgoing message queues for communication between
+/// the console loop, network receive loops, and background send/display tasks.
 /// </summary>
 public class MessageQueue
 {

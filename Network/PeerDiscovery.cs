@@ -10,14 +10,7 @@ using SecureMessenger.Core;
 namespace SecureMessenger.Network;
 
 /// <summary>
-/// Sprint 3: UDP-based peer discovery using broadcast.
-/// Broadcasts presence and listens for other peers on the local network.
-///
-/// Discovery Protocol:
-/// - Message format: "PEER:{peerId}:{tcpPort}"
-/// - Example: "PEER:abc12345:5000"
-/// - Broadcast every 5 seconds
-/// - Peers timeout after 30 seconds of no broadcasts
+/// Broadcasts this peer's presence over UDP and listens for discovery broadcasts from other peers.
 /// </summary>
 public class PeerDiscovery
 {
