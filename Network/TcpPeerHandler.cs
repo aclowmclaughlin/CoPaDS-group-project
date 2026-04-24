@@ -36,12 +36,18 @@ public class TcpPeerHandler
     public event Action<Peer>? OnPeerDisconnected;
     public event Action<Peer, Message>? OnMessageReceived;
 
+    private readonly HeartbeatMonitor _heartbeatMonitor = new();
+
+    private readonly ReconnectionPolicy _reconnectionPolicy;
+
     public int Port { get; private set; }
     public bool IsListening { get; private set; }
 
     public TcpPeerHandler()
     {
         ourMessageSigner = new MessageSigner(ourRSA.Rsa);
+        _heartbeatMonitor.OnConnectionFailed += HandleConnectionFailure;
+        _reconnectionPolicy = new ReconnectionPolicy(this);
     }
 
     /// <summary>
@@ -66,6 +72,9 @@ public class TcpPeerHandler
         // Create and start a new Thread running ListenLoop
         _listenThread = new Thread(ListenLoop);
         _listenThread.Start();
+
+        // Start heartbeat monitor
+        _heartbeatMonitor.Start();
 
         // Print a message indicating the server is listening
         Console.WriteLine($"Peer handler started and listening on port {port}");
@@ -223,6 +232,9 @@ public class TcpPeerHandler
             OnPeerConnected?.Invoke(peer);
 
             _ = Task.Run(() => ReceiveLoop(peer));
+            _ = Task.Run(() => HeartbeatLoop(peer));
+
+            _heartbeatMonitor.StartMonitoring(peer.Id);
             
             return true;
         }
@@ -268,6 +280,9 @@ public class TcpPeerHandler
         // Create and start a new Thread running ReceiveLoop for this peer
         var receiveThread = new Thread(async () => await ReceiveLoop(peer));
         receiveThread.Start();
+        
+        // Check heartbeat
+        _heartbeatMonitor.StartMonitoring(peer.Id);
     }
 
     /// <summary>
@@ -313,6 +328,14 @@ public class TcpPeerHandler
                     continue;
                 }
 
+                // Heartbeat update
+                if (message.Type == MessageType.Heartbeat)
+                {
+                    _heartbeatMonitor.RecordHeartbeat(peer.Id);
+                    continue;
+                }
+
+
                 if (!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
                     peer.Name = message.Sender;
                 
@@ -339,6 +362,27 @@ public class TcpPeerHandler
         finally
         {
             DisconnectPeer(peer);
+        }
+    }
+
+    /// <summary>
+    /// Hearbeat looop for a peer
+    /// </summary>
+    private async Task HeartbeatLoop(Peer peer)
+    {
+        while (peer.IsConnected && !_cancellationTokenSource!.Token.IsCancellationRequested)
+        {
+            try
+            {
+                var heartbeat = CreateMessage("", MessageType.Heartbeat);
+                await SendAsync(peer, heartbeat);
+            }
+            catch (ObjectDisposedException)
+            {
+                // whatever whatever dwbi
+            }
+
+            await Task.Delay(_heartbeatMonitor.HeartbeatInterval);
         }
     }
 
@@ -546,6 +590,23 @@ public class TcpPeerHandler
         OnPeerDisconnected?.Invoke(peer);
     }
 
+    private void HandleConnectionFailure(string peerId)
+    {
+        Peer? peer;
+        lock(_connections_lock)
+        {
+            _connections.TryGetValue(peerId, out peer);
+        }
+
+        if (peer == null) { return; }
+        DisconnectPeer(peer);
+
+        Console.WriteLine($"Peer {peerId} fully disconnected (RIP)");
+
+        // attempt reconnection?
+        _ = Task.Run(() => _reconnectionPolicy.TryReconnect(peer));
+    }
+
     /// <summary>
     /// Stop the server and close all connections.
     /// </summary>
@@ -568,6 +629,9 @@ public class TcpPeerHandler
         
         // Wait for the listen thread to finish (with timeout)
         _listenThread?.Join(1000);
+
+        // Stop the heartbeat monitor
+        _heartbeatMonitor.Stop();
     }
 
     /// <summary>

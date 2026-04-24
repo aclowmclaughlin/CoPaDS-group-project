@@ -26,7 +26,7 @@ namespace SecureMessenger.Network;
 public class ReconnectionPolicy
 {
     private readonly ConcurrentDictionary<string, int> _attemptCount = new();
-    private readonly TcpClientHandler _clientHandler;
+    private readonly TcpPeerHandler _clientHandler;
 
     private const int MaxAttempts = 5;
     private const int InitialDelayMs = 1000;
@@ -36,7 +36,7 @@ public class ReconnectionPolicy
     public event Action<string>? OnReconnectSuccess;
     public event Action<string>? OnReconnectFailed;
 
-    public ReconnectionPolicy(TcpClientHandler clientHandler)
+    public ReconnectionPolicy(TcpPeerHandler clientHandler)
     {
         _clientHandler = clientHandler;
     }
@@ -50,7 +50,8 @@ public class ReconnectionPolicy
         _attemptCount.TryGetValue(peerId, out int attempt);
         while (attempt < MaxAttempts)
         {
-            _attemptCount[peerId] = attempt + 1;
+            attempt++;
+            _attemptCount[peerId] = attempt;
             Console.WriteLine($"{attempt} reconnection attempt to {peerId}, {MaxAttempts - attempt} attempts left.");
             OnReconnectAttempt?.Invoke(peerId, attempt);
 

@@ -16,6 +16,7 @@ public enum MessageType
     JoinRoom,
     LeaveRoom,
     RoomsListing, // Lists all rooms the peer is in
+    Heartbeat
 }
 
 /// <summary>
