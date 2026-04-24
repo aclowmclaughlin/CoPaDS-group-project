@@ -155,8 +155,10 @@ public class TcpPeerHandler
         // save aes key
         keyExchange.ReceiveEncryptedSessionKey(peerAesKey);
         keyExchange.Complete();
-        peer.AesKey = peerAesKey;
-        Console.WriteLine($"Received private AES key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
+        if(keyExchange.SessionKey == null)
+            throw new InvalidOperationException("Key exchange completed without an AES session key.");
+        peer.AesKey = keyExchange.SessionKey;
+        Console.WriteLine($"Received AES session key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
     }
 
     /// <summary>
@@ -194,9 +196,11 @@ public class TcpPeerHandler
         await peer.Stream.WriteAsync(aesSessionKey, 0, aesSessionKey.Length);
         await peer.Stream.FlushAsync();
         // save private key.
-        peer.AesKey = aesSessionKey;
         keyExchange.Complete();
-        Console.WriteLine($"Sent AES key to {peer.Address}:{peer.Port}");
+        if(keyExchange.SessionKey == null)
+            throw new InvalidOperationException("Key exchange completed without an AES session key.");
+        peer.AesKey = keyExchange.SessionKey;
+        Console.WriteLine($"Sent AES session key to {peer.Address}:{peer.Port}");
     }
     
     /// <summary>
