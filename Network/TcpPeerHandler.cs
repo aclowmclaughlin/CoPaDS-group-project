@@ -444,19 +444,28 @@ public class TcpPeerHandler
     /// <summary>
     /// Send a message to specific peer
     /// </summary>
-    public async Task SendAsync(Peer peer, Message msg)
+    public static async Task<SendResult> SendAsync(Peer peer, Message msg)
     {
         if (peer.Stream == null || !peer.IsConnected)
         {
-            return;
+            return SendResult.PeerDisconnected;
         }
 
-        using var writer = new StreamWriter(peer.Stream, leaveOpen: true);
-        string serializedMessage = JsonSerializer.Serialize(msg);
-        string total_msg = serializedMessage.Length + "\n" + serializedMessage;
+        try
+        {
+            using var writer = new StreamWriter(peer.Stream, leaveOpen: true);
+            string serializedMessage = JsonSerializer.Serialize(msg);
+            string total_msg = serializedMessage.Length + "\n" + serializedMessage;
 
-        await writer.WriteAsync(total_msg);
-        await writer.FlushAsync();
+            await writer.WriteAsync(total_msg);
+            await writer.FlushAsync();
+
+            return SendResult.Success;
+        }
+        catch (Exception)
+        {
+            return SendResult.SendFailed;
+        }
     }
 
     /// <summary>
@@ -467,7 +476,13 @@ public class TcpPeerHandler
     {
         Message encryptedMsg = peer.CreateEncryptedMessage(msg);
         Message signedMessage = this.SignEncryptedMessage(encryptedMsg);
-        await this.SendAsync(peer, signedMessage);
+        var result = await SendAsync(peer, signedMessage);
+
+        // one retry if failed once
+        if (result != SendResult.Success)
+        {
+            await SendAsync(peer, signedMessage);
+        }
     }
 
     /// <summary>
