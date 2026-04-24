@@ -324,6 +324,9 @@ class Program
                 case CommandType.Exit:
                     Console.WriteLine("Disconnecting all client connections");
                     tcpPeerHandler?.Stop();
+                    if(peerDiscovery != null)
+                        await peerDiscovery.Stop();
+
                     break;
                 case CommandType.Unknown:
                     Console.WriteLine(resulty.Message ?? "Unknown command. Use /help.");

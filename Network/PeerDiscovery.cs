@@ -50,14 +50,20 @@ public class PeerDiscovery
     /// </summary>
     public void Start(int tcpPort)
     {
+        if(_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+            return;
+
         TcpPort = tcpPort;
         _cancellationTokenSource = new CancellationTokenSource();
-        _udpClient = new UdpClient(_broadcastPort)
-        {
-            EnableBroadcast = true
-        };
-        _listenTask = ListenLoop();
-        _broadcastTask = BroadcastLoop();
+
+        _udpClient = new UdpClient(AddressFamily.InterNetwork);
+        _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+        _udpClient.Client.ExclusiveAddressUse = false;
+        _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, _broadcastPort));
+        _udpClient.EnableBroadcast = true;
+
+        _listenTask = Task.Run(ListenLoop);
+        _broadcastTask = Task.Run(BroadcastLoop);
     }
 
     /// <summary>
@@ -65,19 +71,40 @@ public class PeerDiscovery
     /// </summary>
     private async Task BroadcastLoop()
     {
-        IPEndPoint endPoint = new IPEndPoint(IPAddress.Broadcast, _broadcastPort);
+        IPEndPoint[] endpoints =
+        {
+            new IPEndPoint(IPAddress.Broadcast, _broadcastPort),
+            new IPEndPoint(IPAddress.Loopback, _broadcastPort)
+        };
+
         CancellationToken cancellationToken = _cancellationTokenSource!.Token;
-        byte[] broadcastMessage = Encoding.UTF8.GetBytes($"{PEER_MESSAGE_PREFIX}:{LocalPeerId}:{TcpPort}");
+
         while(!cancellationToken.IsCancellationRequested)
         {
-            try
+            byte[] broadcastMessage = Encoding.UTF8.GetBytes($"{PEER_MESSAGE_PREFIX}:{LocalPeerId}:{TcpPort}");
+
+            foreach(IPEndPoint endpoint in endpoints)
             {
-                await _udpClient!.SendAsync(broadcastMessage, endPoint, cancellationToken);
+                try {
+                    await _udpClient!.SendAsync(broadcastMessage, endpoint, cancellationToken);
+                }
+                catch(SocketException) {
+                    // Broadcast errors are ignored so discovery can keep trying
+                }
+                catch(ObjectDisposedException) {
+                    return;
+                }
+                catch(OperationCanceledException) {
+                    return;
+                }
+            }
+
+            try {
                 await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-            } 
-            catch (SocketException) {} 
-            catch(TaskCanceledException) {} 
-            catch (OperationCanceledException) {}
+            }
+            catch(OperationCanceledException) {
+                return;
+            }
         }
     }
 
@@ -89,19 +116,25 @@ public class PeerDiscovery
         CancellationToken cancellationToken = _cancellationTokenSource!.Token;
         while(!cancellationToken.IsCancellationRequested)
         {
-            try
-            {
-                // wait for message received
-                var result = await _udpClient!.ReceiveAsync(cancellationToken);
+            try {
+                UdpReceiveResult result = await _udpClient!.ReceiveAsync(cancellationToken);
 
                 string message = Encoding.UTF8.GetString(result.Buffer);
-                if (message.StartsWith(PEER_MESSAGE_PREFIX))
+
+                if(message.StartsWith(PEER_MESSAGE_PREFIX))
                 {
                     ProcessDiscoveryMessage(message, result.RemoteEndPoint.Address);
                 }
-            } 
-            catch(SocketException) {} 
-            catch(OperationCanceledException) {}
+            }
+            catch(SocketException) {
+                // Receive errors are ignored so discovery can keep listening
+            }
+            catch(ObjectDisposedException) {
+                return;
+            }
+            catch(OperationCanceledException) {
+                return;
+            }
         }
     }
 
@@ -134,6 +167,10 @@ public class PeerDiscovery
         {
             OnPeerDiscovered!.Invoke(discoveredPeer);
         }
+        else // Update known peers on discovery
+        {
+            _knownPeers[peerId] = discoveredPeer;
+        }
 
         // Record that we did receive a heartbeat from the peer.
         heartbeatMonitor.RecordHeartbeat(peerId);
@@ -153,9 +190,38 @@ public class PeerDiscovery
     /// </summary>
     public async Task Stop()
     {
-        _cancellationTokenSource!.Cancel();
-        await _listenTask!;
-        await _broadcastTask!;
-        _udpClient!.Close();
+        if(_cancellationTokenSource == null)
+            return;
+
+        _cancellationTokenSource.Cancel();
+        _udpClient?.Close();
+
+        Task[] tasks = new[]
+        {
+            _listenTask,
+            _broadcastTask
+        }
+        .Where(task => task != null)
+        .Cast<Task>()
+        .ToArray();
+
+        try {
+            await Task.WhenAll(tasks);
+        }
+        catch(OperationCanceledException) {
+            // Discovery is shutting down normally
+        }
+        catch(ObjectDisposedException) {
+            // Socket disposal is expected during shutdown
+        }
+
+        _udpClient?.Dispose();
+        _udpClient = null;
+
+        _cancellationTokenSource.Dispose();
+        _cancellationTokenSource = null;
+
+        _listenTask = null;
+        _broadcastTask = null;
     }
 }
