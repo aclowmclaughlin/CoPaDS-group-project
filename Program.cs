@@ -181,6 +181,8 @@ class Program
                         Console.WriteLine("Starting TCP Server");
                         tcpPeerHandler.Start(listenPort);
                         //TODO maybe also start the peer discovery?
+                        peerDiscovery?.Start(listenPort);
+                        Console.WriteLine($"[Discovery] Broadcasting presence ;)");
                     }
                     else
                     {
@@ -190,6 +192,15 @@ class Program
 
                 case CommandType.ListPeers:
                     tcpPeerHandler.ListPeers();
+                    var discoveredPeers = peerDiscovery?.GetKnownPeers()
+                        .Where(p => !tcpPeerHandler.GetConnectedPeers().Any(c => c.Id == p.Id))
+                        .ToList();
+                    if (discoveredPeers != null && discoveredPeers.Count > 0)
+                    {
+                        Console.WriteLine("-- Discovered (not yet connected - but you could become friends) --");
+                        foreach (var dp in discoveredPeers)
+                            Console.WriteLine($"  {dp.Id} @ port {dp.Port}");
+                    }
                     break;
                 case CommandType.History:
                     messageHistory.ShowHistory();
@@ -209,12 +220,8 @@ class Program
                     {
                         string room_name = resulty.Args[1];
                         // create the room
-                        messageQueue!.EnqueueOutgoing(new Message
-                        {
-                            Type = MessageType.CreateRoom,
-                            Sender = localUserName,
-                            Room = room_name
-                        });
+                        await tcpPeerHandler.CreateRoomAndBroadcast(room_name);
+                        Console.WriteLine($"Created and joined {room_name}");
                     }
                     break;
                 case CommandType.JoinRoom:
@@ -343,7 +350,7 @@ class Program
             case MessageType.RoomChat:
                 //todo check if we are in the room (need to implement our_rooms)
                 // first
-                if ()
+                if (tcpPeerHandler!.IsInRoom(message.Room))
                 {
                     messageQueue!.EnqueueIncoming(message);
                 }
@@ -353,6 +360,14 @@ class Program
                 break;
             case MessageType.JoinRoom:
                 tcpPeerHandler!.AddToRoom(message.Room, peer);
+                if (tcpPeerHandler.IsInRoom(message.Room))
+                    messageQueue!.EnqueueIncoming(new Message
+                    {
+                        Type = MessageType.Chat,
+                        Sender = "[System]",
+                        Content = $"{message.Sender} joined {message.Room}",
+                        Timestamp = message.Timestamp
+                    });
                 break;
             case MessageType.RoomsListing:
                 tcpPeerHandler!.HandleRoomsListingMessage(message, peer);

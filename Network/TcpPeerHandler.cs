@@ -550,7 +550,7 @@ public class TcpPeerHandler
             Timestamp           = unsignedMessage.Timestamp
         };
     }
-    
+
         public async Task SendAsync(string peerId, Message msg)
     {
         Peer? peer;
