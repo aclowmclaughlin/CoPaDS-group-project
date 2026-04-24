@@ -114,10 +114,10 @@ public class MessageHistory
     /// </summary>
     public void ShowHistory(int limit = 50)
     {
-        Console.WriteLine($"--- Message History (last N messages) ---");
+        Console.WriteLine($"--- Message History (last {limit} messages) ---");
         foreach (var message in GetHistory(limit).Reverse())
         {
-            Console.WriteLine(message.ToString);
+            Console.WriteLine(message.ToString());
         }
         Console.WriteLine($"--- End of History ---");
     }

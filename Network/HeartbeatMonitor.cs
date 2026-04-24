@@ -5,6 +5,13 @@ using System.Collections.Concurrent;
 
 namespace SecureMessenger.Network;
 
+public enum SendResult
+{
+    Success,
+    PeerDisconnected,
+    SendFailed
+}
+
 /// <summary>
 /// Sprint 3: Heartbeat monitoring for connection health.
 /// Detects failed connections by tracking when heartbeats were last received.
