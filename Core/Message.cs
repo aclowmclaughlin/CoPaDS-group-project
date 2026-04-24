@@ -15,6 +15,8 @@ public enum MessageType
     CreateRoom,
     JoinRoom,
     LeaveRoom,
+
+    Heartbeat
 }
 
 /// <summary>

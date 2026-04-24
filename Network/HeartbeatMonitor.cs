@@ -90,8 +90,8 @@ public class HeartbeatMonitor
                 if (elapsed > _timeout)
                 {
                     Console.WriteLine($"[Heartbeat] {entry.Key} connection timeout");
-                    OnConnectionFailed?.Invoke(entry.Key);
                     StopMonitoring(entry.Key);
+                    OnConnectionFailed?.Invoke(entry.Key);
                 }
             }
 
