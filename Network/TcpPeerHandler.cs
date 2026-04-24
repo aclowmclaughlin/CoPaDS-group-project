@@ -459,7 +459,12 @@ public class TcpPeerHandler
             {
                 return false;
             }
-            await SendEncryptedMessageAsync(peer, message);
+            SendResult result = await SendEncryptedMessageAsync(peer, message);
+
+            if(result != SendResult.Success)
+            {
+                return false;
+            }
         }
         return true;
     }
@@ -470,44 +475,85 @@ public class TcpPeerHandler
     public async Task BroadcastAsync(Message msg)
     {
         List<Peer> allPeers;
-        lock (_connections_lock)
+
+        lock(_connections_lock)
         {
             allPeers = _connections.Values.ToList();
         }
 
-        foreach (Peer peer in allPeers)
-        {
-            await SendAsync(peer, msg);
-        }
+        List<Task> sendTasks = allPeers
+            .Select(async peer =>
+            {
+                SendResult result = await SendAsync(peer, msg);
+
+                if(result != SendResult.Success)
+                {
+                    Console.WriteLine($"Failed to send message to {peer}. Marking peer disconnected.");
+                    DisconnectPeer(peer);
+                }
+            })
+            .ToList();
+
+        await Task.WhenAll(sendTasks);
     }
 
     /// <summary>
     /// Send a message to specific peer
     /// </summary>
-    public async Task SendAsync(Peer peer, Message msg)
+    public async Task<SendResult> SendAsync(Peer peer, Message msg)
     {
-        if (peer.Stream == null || !peer.IsConnected)
+        if(peer.Stream == null || !peer.IsConnected)
         {
-            return;
+            return SendResult.PeerDisconnected;
         }
 
-        using var writer = new StreamWriter(peer.Stream, leaveOpen: true);
-        string serializedMessage = JsonSerializer.Serialize(msg);
-        string total_msg = serializedMessage.Length + "\n" + serializedMessage;
+        try
+        {
+            using var writer = new StreamWriter(peer.Stream, leaveOpen: true);
+            string serializedMessage = JsonSerializer.Serialize(msg);
+            string totalMessage = serializedMessage.Length + "\n" + serializedMessage;
 
-        await writer.WriteAsync(total_msg);
-        await writer.FlushAsync();
+            await writer.WriteAsync(totalMessage);
+            await writer.FlushAsync();
+
+            return SendResult.Success;
+        }
+        catch(IOException)
+        {
+            return SendResult.SendFailed;
+        }
+        catch(ObjectDisposedException)
+        {
+            return SendResult.PeerDisconnected;
+        }
+        catch(SocketException)
+        {
+            return SendResult.SendFailed;
+        }
     }
 
     /// <summary>
     /// Encrypts and signs the provided message 
     /// then sends it to the specified peer.
     /// </summary>
-    public async Task SendEncryptedMessageAsync(Peer peer, Message msg)
+    public async Task<SendResult> SendEncryptedMessageAsync(Peer peer, Message msg)
     {
         Message encryptedMsg = peer.CreateEncryptedMessage(msg);
-        Message signedMessage = this.SignEncryptedMessage(encryptedMsg);
-        await this.SendAsync(peer, signedMessage);
+        Message signedMessage = SignEncryptedMessage(encryptedMsg);
+
+        SendResult result = await SendAsync(peer, signedMessage);
+
+        if(result == SendResult.Success)
+            return result;
+
+        Console.WriteLine($"Initial send to {peer} failed. Retrying once.");
+
+        result = await SendAsync(peer, signedMessage);
+
+        if(result != SendResult.Success)
+            DisconnectPeer(peer);
+
+        return result;
     }
 
     /// <summary>
@@ -662,7 +708,7 @@ public class TcpPeerHandler
     /// </summary>
     public IEnumerable<Peer> GetConnectedPeers()
     {
-        lock (_connections)
+        lock (_connections_lock)
         {
             return _connections.Values.ToList();
         }
@@ -690,7 +736,7 @@ public class TcpPeerHandler
     public Peer? GetPeerByName(string name)
     {
         Peer? peer = null;
-        lock(_connections)
+        lock(_connections_lock)
         {
             bool exists = _connections.TryGetValue(name, out peer);
         }

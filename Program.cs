@@ -396,13 +396,23 @@ class Program
 
             var peers = tcpPeerHandler.GetConnectedPeers().ToList();
             
+            // foreach(var peer in peers)
+            // {
+            //     // this will only really send to the server, but the server
+            //     // will forward to the appropriate client based off of
+            //     // the targetPeerId fieldd
+            //     await tcpPeerHandler.SendAsync(peer.Id, logicalMessage);
+            // } TODO: ensure below loop is implemented correctly
+
             // Send differently encrypted message to each peer
             foreach(var peer in peers)
             {
-                // this will only really send to the server, but the server
-                // will forward to the appropriate client based off of
-                // the targetPeerId fieldd
-                await tcpPeerHandler.SendAsync(peer.Id, logicalMessage);
+                SendResult result = await tcpPeerHandler.SendEncryptedMessageAsync(peer, logicalMessage);
+
+                if(result != SendResult.Success)
+                {
+                    Console.WriteLine($"Failed to send message to {peer}.");
+                }
             }
         }
     }
