@@ -117,6 +117,14 @@ class Program
             if(tcpPeerHandler == null || discoveredPeer.Address == null)
                 return;
 
+            // Only initiate connection from one side to avoid duplicate
+            // Smaller ID initiates connection
+            if(string.Compare(localUserName, discoveredPeer.Id, StringComparison.Ordinal) > 0)
+            {
+                Console.WriteLine($"[Discovery] Waiting for {discoveredPeer.Id} to connect to us.");
+                return;
+            }
+
             string discoveredHost = discoveredPeer.Address.ToString();
 
             if(tcpPeerHandler.HasConnectionTo(discoveredHost, discoveredPeer.Port))
