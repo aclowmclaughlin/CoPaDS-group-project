@@ -1,4 +1,4 @@
-# Secure Distributed Messenger - Starter Code
+# Secure Distributed Messenger
 
 CSCI 251: Concepts of Parallel and Distributed Systems
 
@@ -7,7 +7,6 @@ CSCI 251: Concepts of Parallel and Distributed Systems
 **Team Name:** Team 7
 
 **Team Members:**
-=======
 - Rue Clow-McLaughlin
 - Devlin Gallagher
 - Nicholas Merante
@@ -143,10 +142,10 @@ SecureMessenger/
 ├── Security/
 │   ├── AesEncryption.cs       # AES encrypt/decrypt
 │   ├── RsaEncryption.cs       # RSA key management
-│   ├── MessageSigner.cs       # Digital signatures
+│   └── MessageSigner.cs       # Digital signatures
 └── UI/
-    ├── ConsoleUI.cs           # User interface
-    └── MessageHistory.cs      # Message persistence
+    ├── ConsoleUI.cs           # Console command parsing and display
+    └── MessageHistory.cs      # Encrypted message history persistence
 ```
 
 ## What's Provided vs. What You Implement
