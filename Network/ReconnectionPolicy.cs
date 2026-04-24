@@ -1,4 +1,3 @@
-#pragma warning disable CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 

@@ -97,8 +97,6 @@ public class MessageQueue
 
     /// <summary>
     /// Get the count of outgoing messages waiting to be sent.
-    ///
-    /// TODO: Return the count of your outgoing queue
     /// </summary>
     public int OutgoingCount => _outgoing_queue.Count;
 

@@ -36,13 +36,14 @@ public class ConsoleUI
         /listen <port>       - Start listening for connections
         /peers               - List known peers
         /history             - View message history
+        /history clear       - Clear saved message history
         /quit                - Exit the application
-        /exit                - End current session
         /join #<room>        - Join a room
         /create #<room>      - Create a room with the specified room-id
         /leave #<room>       - Leaves the room with the specified room-id
         /rooms               - lists all rooms that are registers with the server
         /msg #<room> message - Send a message to the specified room
+        Any text without /   - Send a chat message to all connected peers
     """;
     public ConsoleUI() {}
 
@@ -56,9 +57,6 @@ public class ConsoleUI
 
     /// <summary>
     /// Display a system message to the console.
-    ///
-    /// TODO: Implement the following:
-    /// 1. Print in format: "[System] message"
     /// </summary>
     public void DisplaySystem(string message)
     {
@@ -123,9 +121,6 @@ public class ConsoleUI
                 break;
             case "/quit":
                 result.CommandType = CommandType.Quit;
-                break;
-            case "/exit":
-                result.CommandType = CommandType.Exit;
                 break;
             default:
                 result.CommandType = CommandType.Unknown;

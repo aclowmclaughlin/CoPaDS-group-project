@@ -37,13 +37,16 @@ public class TcpPeerHandler
     public event Action<Peer, Message>? OnMessageReceived;
 
     private readonly HeartbeatMonitor _heartbeatMonitor = new();
-    private const bool EnableHeartbeatLogging = false; // Toggle to disable console spam
+    private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
 
     private readonly ReconnectionPolicy _reconnectionPolicy;
 
     public int Port { get; private set; }
     public bool IsListening { get; private set; }
 
+    /// <summary>
+    /// Creates a TCP peer handler and wires heartbeat failure handling and reconnection support.
+    /// </summary>
     public TcpPeerHandler()
     {
         ourMessageSigner = new MessageSigner(ourRSA.Rsa);
@@ -67,7 +70,7 @@ public class TcpPeerHandler
     /// </summary>
     public void Start(int port)
     {
-        Console.WriteLine($"Starting Peer Handler...");
+        Console.WriteLine($"Starting peer handler...");
         // Store the port number
         Port = port;
 
@@ -88,7 +91,6 @@ public class TcpPeerHandler
         // Start heartbeat monitor
         _heartbeatMonitor.Start();
 
-        // Print a message indicating the server is listening
         Console.WriteLine($"Peer handler started and listening on port {port}");
     }
 
@@ -129,9 +131,9 @@ public class TcpPeerHandler
 
     
     /// <summary>
-    /// Performs the key exchange from the sender (ConnectAsync caller) side.
+    /// Runs the initiating side of the RSA/AES key exchange for an outgoing connection.
     /// </summary>
-    /// <param name="peer">What Peer we are exchanging keys with</param>
+    /// <param name="peer">The peer being connected to.</param>
     private async Task ExchangeKeySender(Peer peer)
     {
         // send our public key.
@@ -168,9 +170,9 @@ public class TcpPeerHandler
     }
 
     /// <summary>
-    /// Performs the key exchange from the receiver (HandleNewConnection caller) side.
+    /// Runs the receiving side of the RSA/AES key exchange for an incoming connection.
     /// </summary>
-    /// <param name="peer">What Peer we are exchanging keys with</param>
+    /// <param name="peer">The peer connecting to this application.</param>
     private async Task ExchangeKeyReceiver(Peer peer)
     {
         // record our public key
@@ -267,8 +269,10 @@ public class TcpPeerHandler
 
 
     /// <summary>
-    /// Handle a new incoming connection by creating a Peer and starting its receive thread.
+    /// Handles an incoming TCP client by completing key exchange, registering the peer,
+    /// and starting receive and heartbeat loops.
     /// </summary>
+    /// <param name="client">The accepted TCP client.</param>
     private async Task HandleNewConnection(TcpClient client)
     {
         Peer? peer = null;
@@ -435,8 +439,9 @@ public class TcpPeerHandler
     }
 
     /// <summary>
-    /// Hearbeat looop for a peer
+    /// Sends periodic heartbeat messages to a connected peer.
     /// </summary>
+    /// <param name="peer">The peer that should receive heartbeat messages.</param>
     private async Task HeartbeatLoop(Peer peer)
     {
         while (peer.IsConnected && !_cancellationTokenSource!.Token.IsCancellationRequested)
@@ -468,6 +473,10 @@ public class TcpPeerHandler
         };
     }
 
+    /// <summary>
+    /// Creates a message containing the list of rooms this peer has joined.
+    /// </summary>
+    /// <returns>A rooms listing message.</returns>
     public Message CreateRoomsListingMessage()
     {
         List<string> roomsSnapshot;
@@ -480,6 +489,12 @@ public class TcpPeerHandler
         return CreateMessage(string.Join(",", roomsSnapshot), MessageType.RoomsListing);
     }
 
+    /// <summary>
+    /// Updates known room membership using a received rooms listing message.
+    /// </summary>
+    /// <param name="roomsListingMessage">The received rooms listing message.</param>
+    /// <param name="senderPeer">The peer that sent the listing.</param>
+    /// <returns>True if the message was handled as a rooms listing; otherwise false.</returns>
     public bool HandleRoomsListingMessage(Message roomsListingMessage, Peer senderPeer)
     {
         if(roomsListingMessage.Type != MessageType.RoomsListing)
@@ -504,6 +519,11 @@ public class TcpPeerHandler
         return true;
     }
 
+    /// <summary>
+    /// Adds this local peer to a room, creating the room locally if needed.
+    /// </summary>
+    /// <param name="roomName">The room to join.</param>
+    /// <returns>True when the local room state is updated.</returns>
     public bool JoinLocalRoom(string roomName)
     {
         CreateRoom(roomName);
@@ -517,6 +537,11 @@ public class TcpPeerHandler
         return true;
     }
 
+    /// <summary>
+    /// Removes this local peer from a room.
+    /// </summary>
+    /// <param name="roomName">The room to leave.</param>
+    /// <returns>True when the local room state is updated.</returns>
     public bool LeaveLocalRoom(string roomName)
     {
         lock(_roomsLock)
@@ -527,6 +552,11 @@ public class TcpPeerHandler
         return true;
     }
 
+    /// <summary>
+    /// Checks whether this local peer has joined a room.
+    /// </summary>
+    /// <param name="roomName">The room to check.</param>
+    /// <returns>True if this peer is in the room; otherwise false.</returns>
     public bool IsInLocalRoom(string roomName)
     {
         lock(_roomsLock)
@@ -567,34 +597,6 @@ public class TcpPeerHandler
             }
         }
         return true;
-    }
-
-    // /// <summary>
-    // /// Broadcast a message to all connected peers.
-    // /// </summary>
-    public async Task BroadcastAsync(Message msg)
-    {
-        List<Peer> allPeers;
-
-        lock(_connections_lock)
-        {
-            allPeers = _connections.Values.ToList();
-        }
-
-        List<Task> sendTasks = allPeers
-            .Select(async peer =>
-            {
-                SendResult result = await SendAsync(peer, msg);
-
-                if(result != SendResult.Success)
-                {
-                    Console.WriteLine($"Failed to send message to {peer}. Marking peer disconnected.");
-                    DisconnectPeer(peer);
-                }
-            })
-            .ToList();
-
-        await Task.WhenAll(sendTasks);
     }
 
     /// <summary>
@@ -658,10 +660,10 @@ public class TcpPeerHandler
     }
 
     /// <summary>
-    /// Signs an encrypted message
+    /// Signs an encrypted message using this peer's RSA signing key.
     /// </summary>
-    /// <param name="unsignedMessage">The unsigned message</param>
-    /// <returns>The new signed message</returns>
+    /// <param name="unsignedMessage">The encrypted message to sign.</param>
+    /// <returns>A signed encrypted message.</returns>
     public Message SignEncryptedMessage(Message unsignedMessage)
     {
         byte[] signature = ourMessageSigner.SignData(unsignedMessage.EncryptedContent!);
@@ -678,25 +680,9 @@ public class TcpPeerHandler
     }
 
     /// <summary>
-    /// Signs an unencrypted message (I don't think this is actually useful)
+    /// Disconnects a peer by ID if the peer is currently connected.
     /// </summary>
-    /// <param name="unsignedMessage">The unsigned, unencrypted message</param>
-    /// <returns>The new signed message</returns>
-    public Message SignUnencryptedMessage(Message unsignedMessage)
-    {
-        byte[] signature = ourMessageSigner.SignData(Encoding.UTF8.GetBytes(unsignedMessage.Content));
-        
-        return new Message
-        {
-            Type                = unsignedMessage.Type,
-            Sender              = unsignedMessage.Sender,
-            Room                = unsignedMessage.Room,
-            Content             = unsignedMessage.Content,
-            Signature           = signature,
-            Timestamp           = unsignedMessage.Timestamp
-        };
-    }
-
+    /// <param name="peerId">The ID of the peer to disconnect.</param>
     public void Disconnect(string peerId)
     {
         lock (_connections_lock)
@@ -712,6 +698,9 @@ public class TcpPeerHandler
         }
     }
 
+    /// <summary>
+    /// Prints all currently connected peers to the console.
+    /// </summary>
     public void ListPeers()
     {
         List<Peer> peers_list;
@@ -763,6 +752,10 @@ public class TcpPeerHandler
         OnPeerDisconnected?.Invoke(peer);
     }
 
+    /// <summary>
+    /// Handles heartbeat timeout by disconnecting the peer and starting reconnection attempts.
+    /// </summary>
+    /// <param name="peerId">The ID of the failed peer.</param>
     private void HandleConnectionFailure(string peerId)
     {
         Peer? peer;
@@ -781,7 +774,7 @@ public class TcpPeerHandler
     }
 
     /// <summary>
-    /// Stop the server and close all connections.
+    /// Stops listening, disconnects peers, and shuts down heartbeat monitoring.
     /// </summary>
     public void Stop()
     {
@@ -818,6 +811,11 @@ public class TcpPeerHandler
         }
     }
 
+    /// <summary>
+    /// Gets a readable display name for a peer ID for logging.
+    /// </summary>
+    /// <param name="peerId">The internal peer ID.</param>
+    /// <returns>The peer name, endpoint, or ID.</returns>
     private string GetPeerDisplayName(string peerId)
     {
         lock(_connections_lock)
@@ -836,6 +834,11 @@ public class TcpPeerHandler
         return peerId;
     }
 
+    /// <summary>
+    /// Checks whether a connected peer with the given name already exists.
+    /// </summary>
+    /// <param name="peerName">The peer name to search for.</param>
+    /// <returns>True if a matching connected peer exists; otherwise false.</returns>
     public bool HasConnectionWithName(string peerName)
     {
         lock(_connections_lock)
@@ -846,7 +849,12 @@ public class TcpPeerHandler
         }
     }
 
-    // Check if given host and port combo already exists as a connection, used to avoid duplicates
+    /// <summary>
+    /// Checks whether a connection already exists for the given host and port.
+    /// </summary>
+    /// <param name="host">The peer host or IP address.</param>
+    /// <param name="port">The peer TCP port.</param>
+    /// <returns>True if a matching active connection exists; otherwise false.</returns>
     public bool HasConnectionTo(string host, int port)
     {
         IPAddress? targetAddress = null;
@@ -880,6 +888,10 @@ public class TcpPeerHandler
         }
     }
 
+    /// <summary>
+    /// Gets the names of all rooms known by this peer.
+    /// </summary>
+    /// <returns>The known room names.</returns>
     public IEnumerable<string> ListRooms()
     {
         lock(_roomsLock)
@@ -888,6 +900,11 @@ public class TcpPeerHandler
         }
     }
 
+    /// <summary>
+    /// Gets the rooms associated with a connected peer.
+    /// </summary>
+    /// <param name="peer">The peer to check.</param>
+    /// <returns>The rooms that contain the peer.</returns>
     public IEnumerable<string> GetRoomsForPeer(Peer peer)
     {
         lock (_roomsLock)
@@ -899,16 +916,11 @@ public class TcpPeerHandler
         }
     }
 
-    public Peer? GetPeerByName(string name)
-    {
-        Peer? peer = null;
-        lock(_connections_lock)
-        {
-            bool exists = _connections.TryGetValue(name, out peer);
-        }
-        return peer;
-    }
-
+    /// <summary>
+    /// Gets the connected peers known to be in a room.
+    /// </summary>
+    /// <param name="room_name">The room name.</param>
+    /// <returns>A list of peers in the room, or null if the room is unknown.</returns>
     public List<Peer>? GetPeersInRoom(string room_name)
     {
         lock(_roomsLock)
@@ -920,6 +932,11 @@ public class TcpPeerHandler
         return null; // Returns null if no peers in room
     }
 
+    /// <summary>
+    /// Creates a room locally if it does not already exist.
+    /// </summary>
+    /// <param name="room_name">The room name.</param>
+    /// <returns>True if the room already existed; otherwise false.</returns>
     public bool CreateRoom(string room_name)
     {
         // returns true if the room existed already, 
@@ -932,6 +949,12 @@ public class TcpPeerHandler
         return false;
     }
 
+    /// <summary>
+    /// Adds a peer to a known room.
+    /// </summary>
+    /// <param name="room_name">The room name.</param>
+    /// <param name="peer">The peer to add.</param>
+    /// <returns>True if the peer is in the room; otherwise false.</returns>
     public bool AddToRoom(string room_name, Peer peer)
     {
         // returns false if the room doesn't exist,
@@ -952,6 +975,12 @@ public class TcpPeerHandler
         return true;
     }
 
+    /// <summary>
+    /// Removes a peer from a room if present.
+    /// </summary>
+    /// <param name="room_name">The room name.</param>
+    /// <param name="peer">The peer to remove.</param>
+    /// <returns>True if the room exists and removal is complete; otherwise false.</returns>
     public bool RemoveFromRoom(string room_name, Peer peer)
     {
         // returns false if the room doesn't exist,

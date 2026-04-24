@@ -25,7 +25,6 @@ public class PeerDiscovery
     private CancellationTokenSource? _cancellationTokenSource;
     private readonly ConcurrentDictionary<string, Peer> _knownPeers = new();
 
-    private readonly HeartbeatMonitor heartbeatMonitor;
     private readonly int _broadcastPort = 5001;
     private Task? _listenTask;
     private Task? _broadcastTask;
@@ -37,11 +36,14 @@ public class PeerDiscovery
 
     private static readonly string PEER_MESSAGE_PREFIX = "PEER";
 
-
-    public PeerDiscovery(string ownId, HeartbeatMonitor heartbeatMonitor, Action<Peer> onPeerDiscovered)
+    /// <summary>
+    /// Creates a peer discovery service for the local peer.
+    /// </summary>
+    /// <param name="ownId">The local peer ID/name to broadcast.</param>
+    /// <param name="onPeerDiscovered">Callback invoked when a new peer is discovered.</param>
+    public PeerDiscovery(string ownId, Action<Peer> onPeerDiscovered)
     {
         LocalPeerId = ownId;
-        this.heartbeatMonitor = heartbeatMonitor;
         this.OnPeerDiscovered += onPeerDiscovered;
     }
 
@@ -67,8 +69,9 @@ public class PeerDiscovery
     }
 
     /// <summary>
-    /// Periodically broadcast our presence to the network.
+    /// Repeatedly broadcasts this peer's presence and TCP listening port.
     /// </summary>
+    /// <returns>A task representing the broadcast loop.</returns>
     private async Task BroadcastLoop()
     {
         IPEndPoint[] endpoints =
@@ -109,8 +112,9 @@ public class PeerDiscovery
     }
 
     /// <summary>
-    /// Listen for peer broadcast messages.
+    /// Listens for UDP discovery broadcasts from other peers.
     /// </summary>
+    /// <returns>A task representing the listening loop.</returns>
     private async Task ListenLoop()
     {
         CancellationToken cancellationToken = _cancellationTokenSource!.Token;
@@ -139,8 +143,10 @@ public class PeerDiscovery
     }
 
     /// <summary>
-    /// Parse a discovery message and add/update the peer.
+    /// Parses a discovery broadcast and records or updates the discovered peer.
     /// </summary>
+    /// <param name="message">The received discovery message.</param>
+    /// <param name="senderAddress">The IP address that sent the broadcast.</param>
     private void ProcessDiscoveryMessage(string message, IPAddress senderAddress)
     {
         string[] split_message = message.Split(":");

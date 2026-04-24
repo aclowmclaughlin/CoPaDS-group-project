@@ -2,7 +2,6 @@
 // CSCI 251 - Secure Distributed Messenger
 
 using System.Text.Json;
-using Microsoft.VisualBasic;
 using SecureMessenger.Core;
 
 namespace SecureMessenger.UI;
@@ -80,7 +79,7 @@ public class MessageHistory
     }
 
     /// <summary>
-    /// Write the current messages to the history file.
+    /// Writes the current in-memory message history to the history file.
     /// </summary>
     private void PersistToFile()
     {
@@ -114,6 +113,10 @@ public class MessageHistory
         }
     }
 
+    /// <summary>
+    /// Runs a file operation while holding a cross-process lock for the history file.
+    /// </summary>
+    /// <param name="fileAction">The file operation to perform.</param>
     private static void RunWithFileLock(Action fileAction)
     {
         bool lockTaken = false;

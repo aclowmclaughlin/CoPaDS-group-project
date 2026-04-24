@@ -3,19 +3,20 @@
 
 namespace SecureMessenger.Core;
 
-// Server messages are meant to be handled by the server
-// client messages should just be forwared by the server.
+/// <summary>
+/// Types of messages exchanged between peers.
+/// </summary>
 public enum MessageType
 {
-    // End-to-end client messages
+    // End-to-end peer messages
     Chat,
     RoomChat,
 
-    // Room commands
+    // Room and connection-control messages
     CreateRoom,
     JoinRoom,
     LeaveRoom,
-    RoomsListing, // Lists all rooms the peer is in
+    RoomsListing,
     Heartbeat
 }
 
@@ -27,15 +28,12 @@ public class Message
     public Guid Id { get; set; } = Guid.NewGuid();
     public MessageType Type { get; set; } = MessageType.Chat;
 
-    public string Sender { get; set; }          = string.Empty; // no longer need field?
+    public string Sender { get; set; }          = string.Empty;
     public string Room { get; set; }            = string.Empty;
 
     public string Content { get; set; } = string.Empty;
     public byte[]? EncryptedContent { get; set; }
     public byte[]? Signature { get; set; }
-
-    public byte[]? PublicKey { get; set; }
-    public byte[]? EncryptedSessionKey { get; set; } // no longer need field?
     
     public DateTime Timestamp { get; set; } = DateTime.Now;
     public override string ToString()

@@ -59,12 +59,15 @@ class Program
     private static TcpPeerHandler? tcpPeerHandler;
     private static ConsoleUI? consoleUI;
     private static CancellationTokenSource? cancellationTokenSource;
-    private static HeartbeatMonitor? heartbeatMonitor;
 
     private static MessageHistory? messageHistory; 
 
     private static PeerDiscovery? peerDiscovery;
 
+    /// <summary>
+    /// Initializes the application, starts background tasks, starts peer discovery/listening,
+    /// and runs the main console command loop.
+    /// </summary>
     static async Task Main(string[] args)
     {
         Console.WriteLine("================================");
@@ -82,7 +85,6 @@ class Program
         consoleUI = new ConsoleUI();    // creates a console and put in the message guy
         tcpPeerHandler = new TcpPeerHandler(){localUserName = localUserName};
         messageHistory = new MessageHistory();
-        heartbeatMonitor = new HeartbeatMonitor();
 
         // 1. TcpServer.OnPeerConnected - handle new incoming connections
         // 2. TcpServer.OnMessageReceived - handle received messages
@@ -94,9 +96,7 @@ class Program
         tcpPeerHandler.OnPeerDisconnected += peer =>
             Console.WriteLine("Disconnected peer " + peer.Id);
 
-        heartbeatMonitor.Start();
-
-        peerDiscovery = new PeerDiscovery(localUserName, heartbeatMonitor, async discoveredPeer =>
+        peerDiscovery = new PeerDiscovery(localUserName, async discoveredPeer =>
         {
             if(tcpPeerHandler == null || discoveredPeer.Address == null)
                 return;
@@ -124,15 +124,12 @@ class Program
                 discoveredPeer.Port
             );
 
-            // Display message indicating successfull auto-connect to new peer
+            // Display successful auto-connects for demo visibility
             if(connected)
                 Console.WriteLine($"[Discovery] Auto-connected to {discoveredPeer.Id}");
         });
 
-        // TODO: Start background threads
-        // 1. Start a thread/task for processing incoming messages
-        // 2. Start a thread/task for sending outgoing messages
-        // Note: TcpServer.Start() will create its own listen thread
+        // Start background tasks for incoming display and outgoing network sends
         List<Task> tasklist =
         [
             Task.Run(ProcessIncomingMessages),  // pcim
@@ -191,13 +188,14 @@ class Program
                     if(resulty.Args != null && resulty.Args.Length >= 3 && int.TryParse(resulty.Args[2], out int port))
                     {
                         bool connected = await tcpPeerHandler.ConnectAsync(resulty.Args[1], port);
+
                         if(connected)
                         {
-                            //TODO
+                            Console.WriteLine($"Connected to peer at {resulty.Args[1]}:{port}");
                         }
                         else
                         {
-                            Console.WriteLine($"Couldn't connect to server at {resulty.Args[1]}:{port}"); // This now checks if the port can happen and if not exits nicely
+                            Console.WriteLine($"Couldn't connect to peer at {resulty.Args[1]}:{port}");
                         }
                     }
                     else
@@ -349,13 +347,6 @@ class Program
                         );
                     }
                     break;
-                case CommandType.Exit:
-                    Console.WriteLine("Disconnecting all client connections");
-                    tcpPeerHandler?.Stop();
-                    if(peerDiscovery != null)
-                        await peerDiscovery.Stop();
-
-                    break;
                 case CommandType.Unknown:
                     Console.WriteLine(resulty.Message ?? "Unknown command. Use /help.");
                     break;
@@ -365,13 +356,7 @@ class Program
             }
         }
 
-        // TODO: Implement graceful shutdown
-        // 1. Cancel the CancellationTokenSource
-        // 2. Stop the TcpServer
-        // 3. Disconnect all clients
-        // 4. Complete the MessageQueue
-        // 5. Wait for background threads to finish
-
+        // Shut down background work, network connections, discovery, and message queues
         cancellationTokenSource!.Cancel();
 
         tcpPeerHandler?.Stop();
@@ -383,7 +368,11 @@ class Program
         Console.WriteLine("Goodbye!");
     }
 
-    // Auto port assignment; useful for local demo
+    /// <summary>
+    /// Finds the first available TCP port for local listening, skipping the UDP discovery port.
+    /// </summary>
+    /// <param name="startingPort">The first port to check.</param>
+    /// <returns>An available TCP port number.</returns>
     private static int FindAvailableTcpPort(int startingPort = 5000)
     {
         int port = startingPort;
@@ -409,7 +398,10 @@ class Program
         throw new InvalidOperationException("No available TCP port found between 5000 and 5999.");
     }
 
-    // Automatically start listening on program launch instead of requiring listen command
+    /// <summary>
+    /// Starts TCP listening and peer discovery on the requested port if the app is not already listening.
+    /// </summary>
+    /// <param name="listenPort">The TCP port to listen on.</param>
     private static void StartListening(int listenPort)
     {
         if(tcpPeerHandler == null)
@@ -444,12 +436,20 @@ class Program
         }
     }
 
+    /// <summary>
+    /// Handles the event raised when a peer connection is established.
+    /// </summary>
+    /// <param name="peer">The connected peer.</param>
     private static void HandlePeerConnected(Peer peer)
     {
         Console.WriteLine($"Connected to Peer {peer}");
-        //TODO add the peer to the heartbeat monitor??
     }
 
+    /// <summary>
+    /// Handles decrypted incoming messages and routes them to room handling, display, or history.
+    /// </summary>
+    /// <param name="peer">The peer that sent the message.</param>
+    /// <param name="message">The decrypted message received from the peer.</param>
     private static void HandleMessageReceived(Peer peer, Message message)
     {
         // ANY MESSAGES TO DISPLAY MUST BE ADDED 
@@ -487,6 +487,10 @@ class Program
         }
     }
 
+    /// <summary>
+    /// Processes messages from the incoming queue and displays them to the console.
+    /// </summary>
+    /// <returns>A completed task when processing stops.</returns>
     private static Task ProcessIncomingMessages()
     {
         while(!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
@@ -505,9 +509,12 @@ class Program
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Processes messages from the outgoing queue and sends them to connected peers.
+    /// </summary>
+    /// <returns>A task representing the outgoing message processing loop.</returns>
     private static async Task SendOutgoingMessages()
     {
-        //TODO fix this logic.
         while(!cancellationTokenSource!.Token.IsCancellationRequested)
         {
             Message? logicalMessage;
@@ -524,14 +531,6 @@ class Program
             }
 
             var peers = tcpPeerHandler.GetConnectedPeers().ToList();
-            
-            // foreach(var peer in peers)
-            // {
-            //     // this will only really send to the server, but the server
-            //     // will forward to the appropriate client based off of
-            //     // the targetPeerId fieldd
-            //     await tcpPeerHandler.SendAsync(peer.Id, logicalMessage);
-            // } TODO: ensure below loop is implemented correctly
 
             bool sentToAtLeastOnePeer = false;
 

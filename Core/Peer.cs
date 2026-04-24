@@ -30,20 +30,17 @@ public class Peer
     public byte[]? PublicKey { get; set; }
 
     /// <summary>
-    /// Encrypts the message with this peers key. DOES NOT sign the message, 
-    /// use CreateSignedMessage() in the TcpPeerHandler to do that.
-    /// 
+    /// Encrypts a logical message using this peer's AES session key.
     /// </summary>
-    /// <param name="logicalMessage"></param>
-    /// <returns></returns>
+    /// <param name="logicalMessage">The plaintext logical message to encrypt.</param>
+    /// <returns>A message containing encrypted content for this peer.</returns>
     public Message CreateEncryptedMessage(Message logicalMessage)
     {
         // Encrypt given message using peer's AES session key
-        if (AesKey == null)
-        {
-            Console.WriteLine($"Error creating encrypted message for Peer: {this}. No Aes Key Stored.");
-        }
-        var encryptedBytes = new AesEncryption(AesKey!).Encrypt(logicalMessage.Content);
+        if(AesKey == null)
+            throw new InvalidOperationException($"Cannot encrypt message for {this}; no AES key is available.");
+
+        var encryptedBytes = new AesEncryption(AesKey).Encrypt(logicalMessage.Content);
 
         return new Message
         {
