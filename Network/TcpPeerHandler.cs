@@ -122,7 +122,6 @@ public class TcpPeerHandler
     /// <param name="peer">What Peer we are exchanging keys with</param>
     private async Task ExchangeKeySender(Peer peer)
     {
-        KeyExchange keyExchange = new();
         // send our public key.
         byte[] publicKey = ourRSA.ExportPublicKey();
         byte[] lengthBytes = BitConverter.GetBytes(publicKey.Length);
@@ -141,23 +140,18 @@ public class TcpPeerHandler
         
         // save peer public key
         peer.PublicKey = peerPublicKey;
-        keyExchange.ReceivePublicKey(peerPublicKey);
         Console.WriteLine($"Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
         
         // Finalize key exchange
-        byte[] encryptedSessionKey = keyExchange.CreateEncryptedSessionKey();
+        byte[] aesSessionKey = AesEncryption.GenerateKey();
+        byte[] encryptedSessionKey = ourRSA.EncryptSessionKey(aesSessionKey, peerPublicKey);
 
         lengthBytes = BitConverter.GetBytes(encryptedSessionKey.Length);
         await peer.Stream.WriteAsync(lengthBytes, 0, lengthBytes.Length);
         await peer.Stream.WriteAsync(encryptedSessionKey, 0, encryptedSessionKey.Length);
         await peer.Stream.FlushAsync();
 
-        keyExchange.Complete();
-
-        if(keyExchange.SessionKey == null)
-            throw new InvalidOperationException("Key exchange completed without an AES session key.");
-
-        peer.AesKey = keyExchange.SessionKey;
+        peer.AesKey = aesSessionKey;
         Console.WriteLine($"Sent AES session key to {peer.Address}:{peer.Port}");
     }
 
@@ -167,9 +161,8 @@ public class TcpPeerHandler
     /// <param name="peer">What Peer we are exchanging keys with</param>
     private async Task ExchangeKeyReceiver(Peer peer)
     {
-        KeyExchange keyExchange = new();
         // record our public key
-        var ourPublicKey = keyExchange.GetPublicKey();
+        byte[] ourPublicKey = ourRSA.ExportPublicKey();
         // receive their public key
         byte[] keyLengthBytes = new byte[4];
         await peer.Stream!.ReadExactlyAsync(keyLengthBytes, 0, 4);
@@ -179,7 +172,6 @@ public class TcpPeerHandler
         await peer.Stream.ReadExactlyAsync(peerPublicKey, 0, keyLength);
 
         peer.PublicKey = peerPublicKey;
-        keyExchange.ReceivePublicKey(peerPublicKey);
         Console.WriteLine($"Received initial public key ({keyLength} bytes) from {peer.Address}:{peer.Port}");
         
         // send our public key
@@ -197,12 +189,9 @@ public class TcpPeerHandler
         byte[] encryptedSessionKey = new byte[keyLength];
         await peer.Stream.ReadExactlyAsync(encryptedSessionKey, 0, keyLength);
 
-        keyExchange.ReceiveEncryptedSessionKey(encryptedSessionKey);
+        byte[] aesSessionKey = ourRSA.DecryptSessionKey(encryptedSessionKey);
 
-        if(keyExchange.SessionKey == null)
-            throw new InvalidOperationException("Key exchange completed without an AES session key.");
-
-        peer.AesKey = keyExchange.SessionKey;
+        peer.AesKey = aesSessionKey;
         Console.WriteLine($"Received AES session key from {peer.Address}:{peer.Port}");
     }
     
