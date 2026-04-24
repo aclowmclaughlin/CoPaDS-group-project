@@ -360,6 +360,8 @@ class Program
         cancellationTokenSource!.Cancel();
 
         tcpPeerHandler?.Stop();
+        if(peerDiscovery != null)
+            await peerDiscovery.Stop();
         messageQueue?.CompleteAdding();
 
         Task.WaitAll(tasklist);
