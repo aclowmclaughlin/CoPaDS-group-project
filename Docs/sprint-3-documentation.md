@@ -356,7 +356,7 @@ To clear local history:
 
 ### Bonus Features (if implemented)
 - [ ] Message relay through intermediate peers
-- [ ] Encrypted history storage
+- [x] Encrypted history storage
 - [ ] Peer persistence (save/load known peers)
 
 ---
@@ -397,9 +397,10 @@ AI tools were used as a limited support resource for method documentation, synta
 |-------|-------------|----------|------------|
 | Direct one-to-one peer messaging is not implemented | Plain text messages are broadcast to connected peers, while `/msg #room` is used for room chat. The assignment does not require direct `@peer` messaging. | Low | Use room chat or general connected-peer chat. |
 | Public keys are not independently verified | Peers exchange RSA public keys directly, but there is no certificate authority or trust-on-first-use persistence. | Medium | Demo on trusted local peers. |
-| Message history is not encrypted | Messages are saved as JSON in `message_history.json`. | Low | Delete history with `/history clear`; encrypted history is listed as a bonus feature but not implemented. |
+| Message history encryption uses a local key file | History is encrypted, but the AES key is stored locally in `message_history.key`. Anyone with both the encrypted history file and key file could decrypt it. | Low | Keep `message_history.key` private and ignored by Git; use `/history clear` to remove saved history. |
 | UDP discovery can be blocked by firewall/network settings | UDP broadcast may not work on all networks. | Medium | Use manual `/connect <ip> <port>` fallback. |
 | Message relay is not implemented | Peers send to directly connected peers only. | Low | Ensure peers are directly connected for the demo. |
+
 
 ---
 
