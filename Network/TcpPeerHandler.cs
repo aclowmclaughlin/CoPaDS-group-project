@@ -314,11 +314,9 @@ public class TcpPeerHandler
         
         await SendEncryptedMessageAsync(peer, CreateRoomsListingMessage()); 
 
-        // Create and start a new Thread running ReceiveLoop for this peer
-        var receiveThread = new Thread(async () => await ReceiveLoop(peer));
-        receiveThread.Start();
-        
-        // Check heartbeat
+        _ = Task.Run(() => ReceiveLoop(peer));
+        _ = Task.Run(() => HeartbeatLoop(peer));
+
         _heartbeatMonitor.StartMonitoring(peer.Id);
     }
 
@@ -365,16 +363,15 @@ public class TcpPeerHandler
                     continue;
                 }
 
+                if(!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
+                    peer.Name = message.Sender;
+
                 // Heartbeat update
-                if (message.Type == MessageType.Heartbeat)
+                if(message.Type == MessageType.Heartbeat)
                 {
                     _heartbeatMonitor.RecordHeartbeat(peer.Id);
                     continue;
                 }
-
-
-                if (!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
-                    peer.Name = message.Sender;
                 
                 Message? decryptedMessage;
                 bool messageVerified = peer.TryVerifyAndDecrypt(message, out decryptedMessage);

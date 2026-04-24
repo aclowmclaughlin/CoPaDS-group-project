@@ -3,6 +3,7 @@
 // Group Project
 
 using System.Net;
+using System.Net.Sockets;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.UI;
@@ -97,23 +98,26 @@ class Program
 
         peerDiscovery = new PeerDiscovery(localUserName, heartbeatMonitor, async discoveredPeer =>
         {
-            Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id} at {discoveredPeer.Address}:{discoveredPeer.Port}");
-
             if(tcpPeerHandler == null || discoveredPeer.Address == null)
+                return;
+
+            if(tcpPeerHandler.HasConnectionWithName(discoveredPeer.Id))
+                return;
+
+            string discoveredHost = discoveredPeer.Address.ToString();
+
+            if(tcpPeerHandler.HasConnectionTo(discoveredHost, discoveredPeer.Port))
                 return;
 
             // Only initiate connection from one side to avoid duplicate
             // Smaller ID initiates connection
             if(string.Compare(localUserName, discoveredPeer.Id, StringComparison.Ordinal) > 0)
             {
-                Console.WriteLine($"[Discovery] Waiting for {discoveredPeer.Id} to connect to us.");
+                Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id}, waiting for it to connect to us.");
                 return;
             }
 
-            string discoveredHost = discoveredPeer.Address.ToString();
-
-            if(tcpPeerHandler.HasConnectionTo(discoveredHost, discoveredPeer.Port))
-                return;
+            Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id} at {discoveredPeer.Address}:{discoveredPeer.Port}");
 
             bool connected = await tcpPeerHandler.ConnectAsync(
                 discoveredHost,
@@ -138,6 +142,17 @@ class Program
 
         Console.WriteLine("Type /help for available commands");
         Console.WriteLine($"Local client name: {localUserName}");
+
+        // Assign port to listen on automatically
+        int startupPort;
+        if(args.Length >= 1 && int.TryParse(args[0], out int requestedPort)) {
+            startupPort = requestedPort;
+        }
+        else {
+            startupPort = FindAvailableTcpPort();
+        }
+
+        StartListening(startupPort);
 
         // Main loop - handle user input
         bool running = true;
@@ -193,10 +208,7 @@ class Program
                 case CommandType.Listen:
                     if(resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[1], out int listenPort))
                     {
-                        Console.WriteLine("Starting TCP Server");
-                        tcpPeerHandler.Start(listenPort);
-                        peerDiscovery?.Start(listenPort);
-                        Console.WriteLine($"Peer discovery started for TCP port {listenPort}");
+                        StartListening(listenPort);
                     }
                     else
                     {
@@ -360,6 +372,68 @@ class Program
         Task.WaitAll(tasklist);
         Console.WriteLine("Goodbye!");
     }
+
+    // Auto port assignment; useful for local demo
+    private static int FindAvailableTcpPort(int startingPort = 5000)
+    {
+        int port = startingPort;
+
+        while(port < 6000)
+        {
+            if(port == 5001)
+            {
+                port++;
+                continue;
+            }
+
+            try {
+                using TcpListener testListener = new TcpListener(IPAddress.Any, port);
+                testListener.Start();
+                return port;
+            }
+            catch(SocketException) {
+                port++;
+            }
+        }
+
+        throw new InvalidOperationException("No available TCP port found between 5000 and 5999.");
+    }
+
+    // Automatically start listening on program launch instead of requiring listen command
+    private static void StartListening(int listenPort)
+    {
+        if(tcpPeerHandler == null)
+        {
+            Console.WriteLine("TCP peer handler is not initialized.");
+            return;
+        }
+
+        if(listenPort == 5001)
+        {
+            Console.WriteLine("Port 5001 is reserved for UDP peer discovery. Use a TCP port like 5000, 5002, or 5004.");
+            return;
+        }
+
+        if(tcpPeerHandler.IsListening)
+        {
+            Console.WriteLine($"Already listening on port {tcpPeerHandler.Port}");
+            return;
+        }
+
+        try {
+            Console.WriteLine($"Starting TCP server on port {listenPort}");
+            tcpPeerHandler.Start(listenPort);
+            peerDiscovery?.Start(listenPort);
+            Console.WriteLine($"Peer discovery started for TCP port {listenPort}");
+        }
+        catch(SocketException exception) when (exception.SocketErrorCode == SocketError.AddressAlreadyInUse) {
+            Console.WriteLine($"Port {listenPort} is already in use. Try another port, such as {listenPort + 1} or {listenPort + 2}.");
+        }
+        catch(SocketException exception) {
+            Console.WriteLine($"Could not start listener on port {listenPort}: {exception.Message}");
+        }
+    }
+
     private static void HandlePeerConnected(Peer peer)
     {
         Console.WriteLine($"Connected to Peer {peer}");
