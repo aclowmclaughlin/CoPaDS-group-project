@@ -160,6 +160,19 @@ class Program
             }
 
             var resulty = consoleUI.ParseCommand(input);
+
+            // Process non-command input as a message to be sent
+            if(!resulty.IsCommand)
+            {
+                messageQueue!.EnqueueOutgoing(new Message
+                {
+                    Type = MessageType.Chat,
+                    Sender = localUserName,
+                    Content = resulty.Message ?? string.Empty
+                });
+                continue;
+            }
+
             switch(resulty.CommandType)
             {
                 case CommandType.Quit:
