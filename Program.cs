@@ -534,18 +534,19 @@ class Program
 
             bool sentToAtLeastOnePeer = false;
 
-            // Send differently encrypted message to each peer
-            foreach(var peer in peers)
-            {
-                SendResult result = await tcpPeerHandler.SendEncryptedMessageAsync(peer, logicalMessage);
+            List<Task<SendResult>> sendTasks = peers.Select(peer => tcpPeerHandler.SendEncryptedMessageAsync(peer, logicalMessage)).ToList();
 
-                if(result == SendResult.Success)
+            SendResult[] results = await Task.WhenAll(sendTasks);
+
+            for(int index = 0; index < peers.Count; index++)
+            {
+                if(results[index] == SendResult.Success)
                 {
-                    sentToAtLeastOnePeer = true; // Used to track message saving
+                    sentToAtLeastOnePeer = true;
                 }
                 else
                 {
-                    Console.WriteLine($"Failed to send message to {peer}.");
+                    Console.WriteLine($"Failed to send message to {peers[index]}.");
                 }
             }
 
