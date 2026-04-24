@@ -10,14 +10,7 @@ using SecureMessenger.Core;
 namespace SecureMessenger.Network;
 
 /// <summary>
-/// Sprint 3: UDP-based peer discovery using broadcast.
-/// Broadcasts presence and listens for other peers on the local network.
-///
-/// Discovery Protocol:
-/// - Message format: "PEER:{peerId}:{tcpPort}"
-/// - Example: "PEER:abc12345:5000"
-/// - Broadcast every 5 seconds
-/// - Peers timeout after 30 seconds of no broadcasts
+/// Broadcasts this peer's presence over UDP and listens for discovery broadcasts from other peers.
 /// </summary>
 public class PeerDiscovery
 {
@@ -25,7 +18,6 @@ public class PeerDiscovery
     private CancellationTokenSource? _cancellationTokenSource;
     private readonly ConcurrentDictionary<string, Peer> _knownPeers = new();
 
-    private readonly HeartbeatMonitor heartbeatMonitor;
     private readonly int _broadcastPort = 5001;
     private Task? _listenTask;
     private Task? _broadcastTask;
@@ -37,11 +29,14 @@ public class PeerDiscovery
 
     private static readonly string PEER_MESSAGE_PREFIX = "PEER";
 
-
-    public PeerDiscovery(string ownId, HeartbeatMonitor heartbeatMonitor, Action<Peer> onPeerDiscovered)
+    /// <summary>
+    /// Creates a peer discovery service for the local peer.
+    /// </summary>
+    /// <param name="ownId">The local peer ID/name to broadcast.</param>
+    /// <param name="onPeerDiscovered">Callback invoked when a new peer is discovered.</param>
+    public PeerDiscovery(string ownId, Action<Peer> onPeerDiscovered)
     {
         LocalPeerId = ownId;
-        this.heartbeatMonitor = heartbeatMonitor;
         this.OnPeerDiscovered += onPeerDiscovered;
     }
 
@@ -50,64 +45,101 @@ public class PeerDiscovery
     /// </summary>
     public void Start(int tcpPort)
     {
+        if(_cancellationTokenSource != null && !_cancellationTokenSource.IsCancellationRequested)
+            return;
+
         TcpPort = tcpPort;
         _cancellationTokenSource = new CancellationTokenSource();
-        _udpClient = new UdpClient(_broadcastPort)
-        {
-            EnableBroadcast = true
-        };
-        _listenTask = ListenLoop();
-        _broadcastTask = BroadcastLoop();
+
+        _udpClient = new UdpClient(AddressFamily.InterNetwork);
+        _udpClient.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.ReuseAddress, true);
+        _udpClient.Client.ExclusiveAddressUse = false;
+        _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, _broadcastPort));
+        _udpClient.EnableBroadcast = true;
+
+        _listenTask = Task.Run(ListenLoop);
+        _broadcastTask = Task.Run(BroadcastLoop);
     }
 
     /// <summary>
-    /// Periodically broadcast our presence to the network.
+    /// Repeatedly broadcasts this peer's presence and TCP listening port.
     /// </summary>
+    /// <returns>A task representing the broadcast loop.</returns>
     private async Task BroadcastLoop()
     {
-        IPEndPoint endPoint = new IPEndPoint(IPAddress.Broadcast, _broadcastPort);
+        IPEndPoint[] endpoints =
+        {
+            new IPEndPoint(IPAddress.Broadcast, _broadcastPort),
+            new IPEndPoint(IPAddress.Loopback, _broadcastPort)
+        };
+
         CancellationToken cancellationToken = _cancellationTokenSource!.Token;
-        byte[] broadcastMessage = Encoding.UTF8.GetBytes($"{PEER_MESSAGE_PREFIX}:{LocalPeerId}:{TcpPort}");
+
         while(!cancellationToken.IsCancellationRequested)
         {
-            try
+            byte[] broadcastMessage = Encoding.UTF8.GetBytes($"{PEER_MESSAGE_PREFIX}:{LocalPeerId}:{TcpPort}");
+
+            foreach(IPEndPoint endpoint in endpoints)
             {
-                await _udpClient!.SendAsync(broadcastMessage, endPoint, cancellationToken);
+                try {
+                    await _udpClient!.SendAsync(broadcastMessage, endpoint, cancellationToken);
+                }
+                catch(SocketException) {
+                    // Broadcast errors are ignored so discovery can keep trying
+                }
+                catch(ObjectDisposedException) {
+                    return;
+                }
+                catch(OperationCanceledException) {
+                    return;
+                }
+            }
+
+            try {
                 await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
-            } 
-            catch (SocketException) {} 
-            catch(TaskCanceledException) {} 
-            catch (OperationCanceledException) {}
+            }
+            catch(OperationCanceledException) {
+                return;
+            }
         }
     }
 
     /// <summary>
-    /// Listen for peer broadcast messages.
+    /// Listens for UDP discovery broadcasts from other peers.
     /// </summary>
+    /// <returns>A task representing the listening loop.</returns>
     private async Task ListenLoop()
     {
         CancellationToken cancellationToken = _cancellationTokenSource!.Token;
         while(!cancellationToken.IsCancellationRequested)
         {
-            try
-            {
-                // wait for message received
-                var result = await _udpClient!.ReceiveAsync(cancellationToken);
+            try {
+                UdpReceiveResult result = await _udpClient!.ReceiveAsync(cancellationToken);
 
                 string message = Encoding.UTF8.GetString(result.Buffer);
-                if (message.StartsWith(PEER_MESSAGE_PREFIX))
+
+                if(message.StartsWith(PEER_MESSAGE_PREFIX))
                 {
                     ProcessDiscoveryMessage(message, result.RemoteEndPoint.Address);
                 }
-            } 
-            catch(SocketException) {} 
-            catch(OperationCanceledException) {}
+            }
+            catch(SocketException) {
+                // Receive errors are ignored so discovery can keep listening
+            }
+            catch(ObjectDisposedException) {
+                return;
+            }
+            catch(OperationCanceledException) {
+                return;
+            }
         }
     }
 
     /// <summary>
-    /// Parse a discovery message and add/update the peer.
+    /// Parses a discovery broadcast and records or updates the discovered peer.
     /// </summary>
+    /// <param name="message">The received discovery message.</param>
+    /// <param name="senderAddress">The IP address that sent the broadcast.</param>
     private void ProcessDiscoveryMessage(string message, IPAddress senderAddress)
     {
         string[] split_message = message.Split(":");
@@ -134,10 +166,10 @@ public class PeerDiscovery
         {
             OnPeerDiscovered!.Invoke(discoveredPeer);
         }
-
-        // Record that we did receive a heartbeat from the peer.
-        heartbeatMonitor.RecordHeartbeat(peerId);
-        
+        else // Update known peers on discovery
+        {
+            _knownPeers[peerId] = discoveredPeer;
+        }
     }
 
     /// <summary>
@@ -153,9 +185,38 @@ public class PeerDiscovery
     /// </summary>
     public async Task Stop()
     {
-        _cancellationTokenSource!.Cancel();
-        await _listenTask!;
-        await _broadcastTask!;
-        _udpClient!.Close();
+        if(_cancellationTokenSource == null)
+            return;
+
+        _cancellationTokenSource.Cancel();
+        _udpClient?.Close();
+
+        Task[] tasks = new[]
+        {
+            _listenTask,
+            _broadcastTask
+        }
+        .Where(task => task != null)
+        .Cast<Task>()
+        .ToArray();
+
+        try {
+            await Task.WhenAll(tasks);
+        }
+        catch(OperationCanceledException) {
+            // Discovery is shutting down normally
+        }
+        catch(ObjectDisposedException) {
+            // Socket disposal is expected during shutdown
+        }
+
+        _udpClient?.Dispose();
+        _udpClient = null;
+
+        _cancellationTokenSource.Dispose();
+        _cancellationTokenSource = null;
+
+        _listenTask = null;
+        _broadcastTask = null;
     }
 }

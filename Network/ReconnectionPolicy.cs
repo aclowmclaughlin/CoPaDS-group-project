@@ -1,4 +1,3 @@
-#pragma warning disable CS1998, CS0169, CS0067, CS0414 // TODO - Remove for Sprint 3
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
@@ -8,20 +7,7 @@ using SecureMessenger.Core;
 namespace SecureMessenger.Network;
 
 /// <summary>
-/// Sprint 3: Automatic reconnection with exponential backoff.
-///
-/// Exponential Backoff Strategy:
-/// - Initial delay: 1 second
-/// - Each retry doubles the delay: 1s -> 2s -> 4s -> 8s -> 16s
-/// - Maximum delay capped at 30 seconds
-/// - Maximum 5 attempts before giving up
-///
-/// Example retry sequence:
-/// Attempt 1: immediate, then wait 1s
-/// Attempt 2: retry, then wait 2s
-/// Attempt 3: retry, then wait 4s
-/// Attempt 4: retry, then wait 8s
-/// Attempt 5: retry, then give up
+/// Attempts to reconnect to disconnected peers using a limited exponential backoff strategy.
 /// </summary>
 public class ReconnectionPolicy
 {

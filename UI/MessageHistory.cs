@@ -1,39 +1,33 @@
 // Team 7: Rue Clow-McLaughlin, Devlin Gallagher, Nicholas Merante, Sophie Duquette
 // CSCI 251 - Secure Distributed Messenger
 
-using System.Text.Json;
-using Microsoft.VisualBasic;
 using SecureMessenger.Core;
+using System.Text.Json;
+using SecureMessenger.Security;
 
 namespace SecureMessenger.UI;
 
 /// <summary>
-/// Sprint 3: Message history storage and retrieval.
-/// Persists messages to a JSON file for retrieval across sessions.
-///
-/// Features:
-/// - Thread-safe message storage
-/// - JSON serialization/deserialization
-/// - Automatic loading on startup
-/// - Configurable history display limit
-///
-/// File Format: JSON array of Message objects
-/// Default file: "message_history.json"
+/// Saves, loads, displays, clears, and encrypts local file-based message history for the peer.
 /// </summary>
 public class MessageHistory
 {
     private readonly string _historyFile;
     private readonly List<Message> _messages = new();
     private readonly object _lock = new();
+    private static readonly Mutex _fileMutex = new(false, "SecureMessengerMessageHistoryFileMutex");
+
+    private readonly string _historyKeyFile; // Used for message history encryption
 
     /// <summary>
-    /// Create a MessageHistory with optional custom file path.
-    /// Automatically loads existing history from file.
-    ///
+    /// Creates a message history store, initializes the encrypted history key path,
+    /// and loads any existing saved history from disk.
     /// </summary>
+    /// <param name="historyFile">The encrypted history file path.</param>
     public MessageHistory(string historyFile = "message_history.json")
     {
         _historyFile = historyFile;
+        _historyKeyFile = Path.ChangeExtension(historyFile, ".key");
         Load();
     }
 
@@ -54,45 +48,52 @@ public class MessageHistory
     /// </summary>
     public void Load()
     {
-        try
+        RunWithFileLock(() =>
         {
-            if (File.Exists(_historyFile))
-            {
-                var json = File.ReadAllText(_historyFile);
-                var messages = JsonSerializer.Deserialize<List<Message>>(json);
-                if (messages != null)
+            try {
+                if(File.Exists(_historyFile))
                 {
-                    lock (_lock)
+                    byte[] encryptedJson = File.ReadAllBytes(_historyFile); // Decrypt file before reading it
+                    string json = DecryptHistoryJson(encryptedJson);
+
+                    var messages = JsonSerializer.Deserialize<List<Message>>(json);
+
+                    if(messages != null)
                     {
-                        _messages.Clear();
-                        _messages.AddRange(messages);
+                        lock(_lock)
+                        {
+                            _messages.Clear();
+                            _messages.AddRange(messages);
+                        }
                     }
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"History won't load ;() : {ex.Message}");
-        }
+            catch(Exception ex) {
+                Console.WriteLine($"History won't load ;() : {ex.Message}");
+            }
+        });
     }
 
     /// <summary>
-    /// Write the current messages to the history file.
+    /// Writes the current in-memory message history to the history file.
     /// </summary>
     private void PersistToFile()
     {
-        try
+        RunWithFileLock(() =>
         {
-            var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-            File.WriteAllText(_historyFile, json);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"History not saved ;() : {ex.Message}");
-        }
+            try {
+                var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                byte[] encryptedJson = EncryptHistoryJson(json); // Encrypt before local file write
+                File.WriteAllBytes(_historyFile, encryptedJson);
+            }
+            catch(Exception ex) {
+                Console.WriteLine($"History not saved ;() : {ex.Message}");
+            }
+        });
     }
 
     /// <summary>
@@ -106,6 +107,35 @@ public class MessageHistory
             return limit.HasValue
                 ?messages.Take(limit.Value).ToList():messages.ToList();
                 //if message is good we add the limit, if not we just shove the msg on list
+        }
+    }
+
+    /// <summary>
+    /// Runs a file operation while holding a cross-process lock for the history file.
+    /// </summary>
+    /// <param name="fileAction">The file operation to perform.</param>
+    private static void RunWithFileLock(Action fileAction)
+    {
+        bool lockTaken = false;
+
+        try {
+            try {
+                lockTaken = _fileMutex.WaitOne(TimeSpan.FromSeconds(5));
+            }
+            catch(AbandonedMutexException) {
+                lockTaken = true;
+            }
+
+            if(!lockTaken) {
+                Console.WriteLine("History file is busy; skipping this history update.");
+                return;
+            }
+
+            fileAction();
+        }
+        finally {
+            if(lockTaken)
+                _fileMutex.ReleaseMutex();
         }
     }
 
@@ -127,13 +157,56 @@ public class MessageHistory
     /// </summary>
     public void Clear()
     {
-        lock(_lock)
+        RunWithFileLock(() =>
         {
-            _messages.Clear();
-            if (File.Exists(_historyFile))
+            lock(_lock)
             {
-                File.Delete(_historyFile);
+                _messages.Clear();
+                if(File.Exists(_historyFile))
+                    File.Delete(_historyFile);
             }
-        }
+        });
+    }
+
+    //----------------------------------
+    // History encryption helper methods
+    //----------------------------------
+
+    /// <summary>
+    /// Loads the local AES history key if it exists, or creates and saves a new key file.
+    /// </summary>
+    /// <returns>The AES key used to encrypt and decrypt message history.</returns>
+    private byte[] GetOrCreateHistoryKey()
+    {
+        if(File.Exists(_historyKeyFile))
+            return Convert.FromBase64String(File.ReadAllText(_historyKeyFile));
+
+        byte[] key = AesEncryption.GenerateKey();
+        File.WriteAllText(_historyKeyFile, Convert.ToBase64String(key));
+        return key;
+    }
+
+    /// <summary>
+    /// Encrypts serialized message history JSON before it is written to disk.
+    /// </summary>
+    /// <param name="json">The plaintext serialized history JSON.</param>
+    /// <returns>The encrypted history bytes.</returns>
+    private byte[] EncryptHistoryJson(string json)
+    {
+        byte[] key = GetOrCreateHistoryKey();
+        AesEncryption aesEncryption = new AesEncryption(key);
+        return aesEncryption.Encrypt(json);
+    }
+
+    /// <summary>
+    /// Decrypts encrypted message history bytes after they are read from disk.
+    /// </summary>
+    /// <param name="encryptedJson">The encrypted history bytes from the history file.</param>
+    /// <returns>The plaintext serialized history JSON.</returns>
+    private string DecryptHistoryJson(byte[] encryptedJson)
+    {
+        byte[] key = GetOrCreateHistoryKey();
+        AesEncryption aesEncryption = new AesEncryption(key);
+        return aesEncryption.Decrypt(encryptedJson);
     }
 }

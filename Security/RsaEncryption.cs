@@ -6,20 +6,7 @@ using System.Security.Cryptography;
 namespace SecureMessenger.Security;
 
 /// <summary>
-/// Sprint 2: RSA encryption for key exchange.
-/// Used to securely exchange AES session keys between peers.
-///
-/// RSA Configuration:
-/// - Key size: 2048 bits
-/// - Padding: OAEP with SHA-256 (RSAEncryptionPadding.OaepSHA256)
-///
-/// Usage:
-/// 1. Each peer generates their own RSA key pair
-/// 2. Peers exchange public keys
-/// 3. One peer generates an AES session key
-/// 4. That peer encrypts the AES key with the other's public key
-/// 5. The encrypted key is sent and decrypted with the private key
-/// 6. Both peers now have the same AES session key
+/// Manages RSA key generation, public key export/import, and AES session key encryption/decryption.
 /// </summary>
 public class RsaEncryption
 {

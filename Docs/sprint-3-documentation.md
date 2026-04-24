@@ -17,25 +17,31 @@
 https://github.com/aclowmclaughlin/CoPaDS-group-project
 
 ## Build & Run Instructions
-Build and run instructions remain the same as Sprint 1.
 
 ### Prerequisites
-- .NET SDK version
+- .NET 9.0 SDK or later
 
 ### Building
-```
+```bash
 dotnet build
 ```
 
 ### Running
+```bash
+dotnet run --project SecureMessenger.csproj
 ```
-[Commands to run]
+By default, the application automatically starts listening on the first available TCP port starting at `5000`. Port `5001` is skipped because it is reserved for UDP peer discovery.
+
+To request a specific TCP port:
+```bash
+dotnet run --project SecureMessenger.csproj -- 5004
 ```
 
 ### Command Line Arguments
+
 | Argument | Description | Default |
 |----------|-------------|---------|
-| | | |
+| `<port>` | Optional TCP listen port. If omitted, the app chooses the first available port from 5000-5999, skipping 5001. | First available port |
 
 ---
 
@@ -43,170 +49,314 @@ dotnet build
 
 | Command | Description | Example |
 |---------|-------------|---------|
-| `/connect <ip> <port>` | Connect to a peer | `/connect 192.168.1.100 5000` |
-| `/listen <port>` | Start listening | `/listen 5000` |
-| `/peers` | List known peers | `/peers` |
+| `/connect <ip> <port>` | Manually connect to a peer | `/connect 192.168.1.100 5000` |
+| `/listen <port>` | Manually start listening if not already listening | `/listen 5004` |
+| `/peers` | List connected peers | `/peers` |
 | `/history` | View message history | `/history` |
+| `/history clear` | Clear local message history | `/history clear` |
 | `/quit` | Exit application | `/quit` |
-| `/help` | Show Help Message | |
-| `/exit` | End current Session | |
-| `/create #<room>` | Creates a room | `/create #test` |
-| `/rooms` | Lists available rooms | `/rooms` |
-| `join #<room>` | Join a room | `join #test` |
-| `/msg #<room> message` | Sends message into room specified | `/msg #test hello world ` |
-| `/leave #<room>` | leave room specified | `/leave #test` |
+| `/help` | Show help message | `/help` |
+| `/create #<room>` | Create and join a room | `/create #test` |
+| `/rooms` | List known rooms | `/rooms` |
+| `/join #<room>` | Join a room | `/join #test` |
+| Any text without `/` | Send a chat message to all connected peers | `hello everyone` |
+| `/msg #<room> message` | Send a message to a room you have joined | `/msg #test hello world` |
+| `/leave #<room>` | Leave a room | `/leave #test` |
+
+Plain text messages are sent to all connected peers. Room-specific messages use `/msg #<room> message` after joining or creating the room.
+
 ---
 
 ## Architecture Diagram
 
-```
-[Insert ASCII diagram of your system architecture]
-[Show major components and how they interact]
-
-+------------------+     +------------------+
-|                  |     |                  |
-|                  |<--->|                  |
-|                  |     |                  |
-+------------------+     +------------------+
+```text
++------------------------------ SecureMessenger Peer ------------------------------+
+|                                                                                  |
+|  +----------------+       +----------------------+       +---------------------+ |
+|  | Console UI     | ----> | MessageQueue         | ----> | TcpPeerHandler      | |
+|  | - commands     |       | - outgoing messages  |       | - TCP listener      | |
+|  | - display      | <---- | - incoming messages  | <---- | - TCP connections   | |
+|  +----------------+       +----------------------+       | - key exchange      | |
+|                                                          | - encrypted sends   | |
+|  +----------------+                                      | - heartbeat loops   | |
+|  | MessageHistory | <----------------------------------> | - reconnect policy  | |
+|  | - JSON file    |                                      +---------------------+ |
+|  +----------------+                                                 ^            |
+|                                                                     |            |
+|  +----------------+                                                 |            |
+|  | PeerDiscovery  | ------------------------------------------------+            |
+|  | - UDP 5001     |                                                              |
+|  | - broadcasts   |                                                              |
+|  +----------------+                                                              |
+|                                                                                  |
+|  +----------------+       +----------------+       +--------------------------+  |
+|  | AES encryption |       | RSA exchange   |       | Message signing          |  |
+|  | per message IV |       | session keys   |       | verify before decrypt    |  |
+|  +----------------+       +----------------+       +--------------------------+  |
++----------------------------------------------------------------------------------+
 ```
 
 ### Component Descriptions
 
 | Component | Responsibility |
 |-----------|----------------|
-| | |
-| | |
-| | |
+| `Program.cs` | Starts the app, creates shared services, handles commands, starts background send/receive processing tasks, and coordinates shutdown. |
+| `ConsoleUI` | Parses commands and displays chat messages. |
+| `MessageQueue` | Provides thread-safe incoming and outgoing message queues using `BlockingCollection`. |
+| `TcpPeerHandler` | Owns TCP listening, outgoing peer connections, key exchange, encrypted sends, receive loops, heartbeat monitoring, reconnection, and room membership tracking. |
+| `PeerDiscovery` | Broadcasts and listens for peer presence over UDP port 5001. |
+| `HeartbeatMonitor` | Tracks last heartbeat time for each active TCP connection and reports connection timeouts. |
+| `ReconnectionPolicy` | Attempts reconnection using exponential backoff after failures. |
+| `MessageHistory` | Saves and loads message history from `message_history.json`, with a cross-process file lock for local multi-instance testing. |
+| `Security` classes | Provide AES encryption, RSA key exchange, and RSA-SHA256 message signing/verification. |
 
 ---
 
 ## Protocol Specification
 
 ### Connection Establishment
-[Describe the full connection handshake]
 
+```text
+Peer A                                      Peer B
+  |                                           |
+  |---- TCP connect ------------------------->|
+  |---- RSA public key ---------------------->|
+  |<--- RSA public key -----------------------|
+  |---- AES session key encrypted with B key ->|
+  |                                           |
+  |  Both peers now store the same AES key    |
+  |  Messages are AES-encrypted and signed    |
+  |                                           |
 ```
-Peer A                          Peer B
-  |                                |
-  |-------- [Step 1] ------------->|
-  |<------- [Step 2] --------------|
-  |-------- [Step 3] ------------->|
-  |                                |
-```
+
+1. The connecting peer opens a TCP connection.
+2. Both peers exchange RSA public keys.
+3. The connecting peer generates a random AES session key.
+4. The connecting peer encrypts the AES session key using the receiver's RSA public key.
+5. The receiver decrypts the AES session key using its RSA private key.
+6. All later chat, room, and room-listing messages are encrypted and signed.
 
 ### Message Flow
-[Describe how messages flow through the system]
+
+1. The user enters a command or plain text in the console.
+2. Plain text is converted into a `Chat` message and added to the outgoing queue.
+3. `/msg #room message` creates a `RoomChat` message for the specified room.
+4. The send task dequeues outgoing messages and sends them to connected peers.
+5. Before sending, the message content is AES-encrypted for each peer and signed with RSA.
+6. The receiving peer verifies the signature, decrypts the content, and passes the logical message to `Program.cs`.
+7. Displayable chat messages are added to the incoming queue and saved to message history.
+8. The incoming processing task displays messages through `ConsoleUI`.
 
 ### Peer Discovery Protocol
-[Describe UDP broadcast format and discovery process]
+
+Peer discovery uses UDP broadcast on port `5001`.
 
 #### Broadcast Message Format
+
+```text
+PEER:<peerId>:<tcpPort>
 ```
-[Format of discovery broadcast]
+
+Example:
+
+```text
+PEER:Laptop-12345:5002
 ```
 
 #### Discovery Process
-1. [Step 1]
-2. [Step 2]
-3. ...
+
+1. Each peer starts TCP listening automatically.
+2. Each peer broadcasts its identity and TCP listen port every 5 seconds.
+3. Peers listen for discovery messages on UDP port 5001.
+4. A peer ignores discovery messages from itself.
+5. If the discovered peer is not already connected, the app may auto-connect.
+6. To avoid both peers connecting at the same time, only the peer with the smaller ID initiates the connection.
+7. `/peers` lists active TCP connections.
 
 ### Heartbeat Protocol
-[Describe heartbeat mechanism]
 
-- **Interval:** [e.g., 5 seconds]
-- **Timeout:** [e.g., 15 seconds]
-- **Action on timeout:** [e.g., mark as disconnected, attempt reconnect]
+Heartbeats are sent over active TCP connections.
+
+- **Interval:** 5 seconds
+- **Timeout:** 15 seconds
+- **Action on timeout:** Stop monitoring the peer, disconnect the old connection, clean up streams/sockets, remove the peer from rooms, and start reconnection attempts.
+
+Heartbeat messages are used only for connection health. UDP discovery messages are not treated as heartbeat messages.
 
 ---
 
 ## P2P Architecture
 
 ### Peer Management
-[Describe how peers are tracked and managed]
+
+Each running application instance is a peer. There is no central server. Every peer can listen for incoming TCP connections and can also initiate outgoing TCP connections to other peers.
+
+Connected peers are stored in `TcpPeerHandler`. Each connected peer has its own TCP stream, RSA public key, AES session key, heartbeat monitoring entry, and send lock.
 
 ### Connection Strategy
-[Describe how connections are established and maintained]
+
+The app starts listening automatically on the first available TCP port beginning at 5000, skipping 5001 because 5001 is used for UDP discovery. Peers advertise their TCP port through UDP discovery and automatically connect when appropriate.
+
+Manual `/listen` and `/connect` commands are still available as fallback controls for firewall, network, or demo issues.
 
 ### Message Routing
-[Describe how messages are routed between peers]
+
+Plain text messages are broadcast to all currently connected peers. Room messages are sent with a room name and are displayed only by peers that have joined that room. Message relay through intermediate peers is not implemented.
 
 ---
 
 ## Resilience Features
 
 ### Failure Detection
-[Describe how connection failures are detected]
+
+Each TCP connection sends heartbeat messages every 5 seconds. If a peer does not receive a heartbeat within 15 seconds, the connection is considered failed.
 
 ### Automatic Reconnection
-[Describe your reconnection strategy]
 
-- **Initial delay:** [e.g., 1 second]
-- **Backoff strategy:** [e.g., exponential, max 30 seconds]
-- **Max attempts:** [e.g., 5]
+When a connection fails, the old connection is cleaned up and reconnection is attempted using exponential backoff.
+
+- **Initial delay:** 1 second
+- **Backoff strategy:** 1s → 2s → 4s → 8s → 16s
+- **Maximum delay:** 30 seconds
+- **Max attempts:** 5
 
 ### Graceful Degradation
-[Describe how the system behaves when peers are unavailable]
+
+If a peer disconnects or cannot be reached, the remaining peers continue running. Failed sends are reported without crashing the app, and unavailable peers are removed from active connection tracking.
 
 ---
 
 ## Message History
 
 ### Storage Format
-The meessage gets read in, serialized, then added into the history file.
+
+Message history is stored as a JSON array of `Message` objects.
 
 ### File Location
-Hisotry is stored within message_history.json
+
+History is stored in:
+
+```text
+message_history.json
+```
+
+This file is ignored by Git because it is local runtime data.
 
 ### History Commands
-Users can use /history to access the last 50 messages in the file.
+
+Users can view recent history with:
+
+```text
+/history
+```
+
+Users can clear saved history with:
+
+```text
+/history clear
+```
+
+### Local Multi-Instance Behavior
+
+When multiple local peer instances run from the same repository folder, they may all access the same history file. File access is protected with a named mutex so local demo instances do not write to the file at the same time.
 
 ---
 
 ## User Guide
 
 ### Getting Started
-1. [Step 1: Start the application]
-2. [Step 2: ...]
-3. ...
+
+1. Build the project with `dotnet build`.
+2. Start the app with `dotnet run --project SecureMessenger.csproj`.
+3. Start additional instances in separate terminals.
+4. Wait a few seconds for UDP discovery and automatic TCP connections.
+5. Use `/peers` to confirm connected peers.
 
 ### Connecting to Peers
-[Instructions for connecting]
+
+The app attempts automatic peer discovery and connection. Manual connection is also available:
+
+```text
+/connect <ip> <port>
+```
+
+For same-machine fallback testing:
+
+```text
+/connect 127.0.0.1 5000
+```
 
 ### Sending Messages
-[Instructions for messaging]
+
+To send a general chat message to all connected peers, type text without a slash:
+
+```text
+hello everyone
+```
+
+To use a room:
+
+```text
+/create #demo
+/join #demo
+/msg #demo hello room
+/leave #demo
+```
 
 ### Viewing Peer Status
-[Instructions for checking peer status]
+
+Use:
+
+```text
+/peers
+```
+
+### Viewing History
+
+Use:
+
+```text
+/history
+```
+
+To clear local history:
+
+```text
+/history clear
+```
 
 ### Troubleshooting
+
 | Problem | Solution |
 |---------|----------|
-| Cannot connect to peer | [Check firewall, verify IP/port] |
-| Messages not sending | [Check connection status] |
-| | |
+| Cannot connect to peer | Check firewall settings, confirm peers are on the same network, or use manual `/connect <ip> <port>`. |
+| UDP discovery does not find peers | Make sure UDP port 5001 is not blocked. Manual `/connect` can be used as a fallback. |
+| Port is already in use | Restart the app and let it auto-select a port, or pass a specific port such as `dotnet run --project SecureMessenger.csproj -- 5004`. |
+| Messages not sending | Run `/peers` to confirm active TCP connections. |
+| Room message says no peers are known in room | Make sure the other peers have run `/join #room` first. |
 
 ---
 
 ## Features Implemented
 
 ### Core Features
-- [ ] P2P architecture (no central server)
-- [ ] Peer discovery (UDP broadcast)
-- [ ] Automatic peer connection
-- [ ] Heartbeat monitoring
-- [ ] Failure detection
-- [ ] Automatic reconnection
-- [ ] Message history (file-based)
-- [ ] Parallel message processing
+- [x] P2P architecture (no central server)
+- [x] Peer discovery (UDP broadcast)
+- [x] Automatic peer connection
+- [x] Heartbeat monitoring
+- [x] Failure detection
+- [x] Automatic reconnection
+- [x] Message history (file-based)
+- [x] Parallel message processing
 
 ### Security Features (from Sprint 2)
-- [ ] AES encryption
-- [ ] RSA key exchange
-- [ ] Message signing
+- [x] AES encryption
+- [x] RSA key exchange
+- [x] Message signing
 
 ### Bonus Features (if implemented)
 - [ ] Message relay through intermediate peers
-- [ ] Encrypted history storage
+- [x] Encrypted history storage
 - [ ] Peer persistence (save/load known peers)
 
 ---
@@ -216,17 +366,28 @@ Users can use /history to access the last 50 messages in the file.
 ### P2P Tests
 | Test | Expected Result | Actual Result | Pass/Fail |
 |------|-----------------|---------------|-----------|
-| 3+ peers can form mesh | All peers connected | | |
-| Peer discovery works | New peer found automatically | | |
-| Peer leaving detected | Removed from peer list | | |
-| Reconnection after failure | Connection restored | | |
+| 3+ peers can form mesh | All peers connected | Three local peers start on separate TCP ports and discover/connect to each other | Pass |
+| Peer discovery works | New peer found automatically | UDP discovery broadcasts peer ID and TCP port; peers auto-connect | Pass |
+| `/peers` lists connected peers | Active peers are displayed | Connected peers appear with name/address/port/status | Pass |
+| Plain text message broadcast | Message reaches all connected peers | Plain text input sends encrypted chat to connected peers | Pass |
+| Room messaging | Joined peers receive room message | Peers that join the same room can receive `/msg #room` messages | Pass |
+| Message history works | Messages save and reload | `/history` displays saved messages from `message_history.json` | Pass |
+| History clear works | History file is cleared | `/history clear` clears saved history | Pass |
 
 ### Resilience Tests
 | Test | Expected Result | Actual Result | Pass/Fail |
 |------|-----------------|---------------|-----------|
-| Kill peer process | Detected as failed | | |
-| Network interruption | Reconnection attempted | | |
-| Peer rejoins | Connection restored | | |
+| Kill peer process | Failure detected | Heartbeat timeout detects failed peer and removes connection | Pass |
+| Peer rejoins | Connection restored | Restarted peer is rediscovered and can reconnect | Pass |
+| Duplicate discovery connections | No repeated duplicate peers | Peer ID comparison prevents both peers from initiating at the same time | Pass |
+| Busy port handling | App avoids crashing | Auto-port selection skips unavailable ports and reserved UDP port 5001 | Pass |
+| Multiple local history writers | No file access crash | Named mutex synchronizes history file access across local app instances | Pass |
+
+---
+
+## AI Usage Note
+
+AI tools were used as a limited support resource for method documentation, syntax reference, debugging guidance, and documentation wording. The team manually reviewed, tested, and verified all generated suggestions before including them in the project.
 
 ---
 
@@ -234,23 +395,33 @@ Users can use /history to access the last 50 messages in the file.
 
 | Issue | Description | Severity | Workaround |
 |-------|-------------|----------|------------|
-| | | | |
+| Direct one-to-one peer messaging is not implemented | Plain text messages are broadcast to connected peers, while `/msg #room` is used for room chat. The assignment does not require direct `@peer` messaging. | Low | Use room chat or general connected-peer chat. |
+| Public keys are not independently verified | Peers exchange RSA public keys directly, but there is no certificate authority or trust-on-first-use persistence. | Medium | Demo on trusted local peers. |
+| Message history encryption uses a local key file | History is encrypted, but the AES key is stored locally in `message_history.key`. Anyone with both the encrypted history file and key file could decrypt it. | Low | Keep `message_history.key` private and ignored by Git; use `/history clear` to remove saved history. |
+| UDP discovery can be blocked by firewall/network settings | UDP broadcast may not work on all networks. | Medium | Use manual `/connect <ip> <port>` fallback. |
+| Message relay is not implemented | Peers send to directly connected peers only. | Low | Ensure peers are directly connected for the demo. |
+
 
 ---
 
 ## Future Improvements
 
-[What would you improve with more time?]
+- Add direct one-to-one messaging by peer name.
+- Add encrypted message history.
+- Add persistent trusted peer keys.
+- Add message relay through intermediate peers.
+- Improve room membership synchronization and room status display.
+- Add a GUI for easier multi-peer demonstrations.
 
 ---
 
 ## Video Demo Checklist
 
 Your demo video (8-10 minutes) should show:
-- [ ] Starting 3+ peer instances
-- [ ] Peer discovery in action
-- [ ] Messages between multiple peers
-- [ ] Killing a peer and showing failure detection
-- [ ] Automatic reconnection when peer returns
-- [ ] Message history feature
-- [ ] `/peers` command showing connected peers
+- [x] Starting 3+ peer instances
+- [x] Peer discovery in action
+- [x] Messages between multiple peers
+- [x] Killing a peer and showing failure detection
+- [x] Automatic reconnection when peer returns
+- [x] Message history feature
+- [x] `/peers` command showing connected peers

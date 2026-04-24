@@ -9,7 +9,7 @@ using SecureMessenger.Security;
 namespace SecureMessenger.Core;
 
 /// <summary>
-/// Represents a connected peer in the network
+/// Stores connection, identity, encryption, and send-synchronization state for one connected peer.
 /// </summary>
 public class Peer
 {
@@ -17,32 +17,29 @@ public class Peer
     public string Name { get; set; } = string.Empty;
     public IPAddress? Address { get; set; }
     public int Port { get; set; }
-    // public DateTime LastSeen { get; set; } = DateTime.Now;
     public bool IsConnected { get; set; }
 
     // Network connection
     public TcpClient? Client { get; set; }
     public NetworkStream? Stream { get; set; }
+    public SemaphoreSlim SendSemaphore { get; } = new(1, 1);
 
     // Sprint 2: Per-session encryption keys
     public byte[]? AesKey { get; set; }
     public byte[]? PublicKey { get; set; }
 
     /// <summary>
-    /// Encrypts the message with this peers key. DOES NOT sign the message, 
-    /// use CreateSignedMessage() in the TcpPeerHandler to do that.
-    /// 
+    /// Encrypts a logical message using this peer's AES session key.
     /// </summary>
-    /// <param name="logicalMessage"></param>
-    /// <returns></returns>
+    /// <param name="logicalMessage">The plaintext logical message to encrypt.</param>
+    /// <returns>A message containing encrypted content for this peer.</returns>
     public Message CreateEncryptedMessage(Message logicalMessage)
     {
         // Encrypt given message using peer's AES session key
-        if (AesKey == null)
-        {
-            Console.WriteLine($"Error creating encrypted message for Peer: {this}. No Aes Key Stored.");
-        }
-        var encryptedBytes = new AesEncryption(AesKey!).Encrypt(logicalMessage.Content);
+        if(AesKey == null)
+            throw new InvalidOperationException($"Cannot encrypt message for {this}; no AES key is available.");
+
+        var encryptedBytes = new AesEncryption(AesKey).Encrypt(logicalMessage.Content);
 
         return new Message
         {

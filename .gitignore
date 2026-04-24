@@ -3,3 +3,5 @@ obj/
 SecureMessenger.sln
 .idea/
 scratch/
+message_history*.json
+message_history*.key

@@ -3,6 +3,7 @@
 // Group Project
 
 using System.Net;
+using System.Net.Sockets;
 using SecureMessenger.Core;
 using SecureMessenger.Network;
 using SecureMessenger.UI;
@@ -11,43 +12,8 @@ using SecureMessenger.UI;
 namespace SecureMessenger;
 
 /// <summary>
-/// Main entry point for the Secure Distributed Messenger.
-///
-/// Architecture Overview:
-/// This application uses multiple threads to handle concurrent operations:
-///
-/// 1. Main Thread (UI Thread)
-///    - Reads user input from console
-///    - Parses commands using ConsoleUI
-///    - Dispatches commands to appropriate handlers
-///
-/// 2. Listen Thread (Server)
-///    - Runs TcpServer to accept incoming connections
-///    - Each accepted connection spawns a receive thread
-///
-/// 3. Receive Thread(s)
-///    - One per connected peer
-///    - Reads messages from network
-///    - Enqueues to incoming message queue
-///
-/// 4. Send Thread
-///    - Dequeues from outgoing message queue
-///    - Sends messages to connected peers
-///
-/// 5. Process Thread (Optional)
-///    - Dequeues from incoming message queue
-///    - Displays messages to user
-///    - Handles decryption and verification
-///
-/// Thread Communication:
-/// - Use MessageQueue for thread-safe message passing
-/// - Use CancellationToken for graceful shutdown
-/// - Use events for peer connection/disconnection notifications
-///
-/// Sprint Progression:
-/// - Sprint 1: Basic threading and networking (connect, send, receive)
-/// - Sprint 2: Add encryption (key exchange, AES encryption, signing)
-/// - Sprint 3: Add resilience (peer discovery, heartbeat, reconnection)
+/// Coordinates application startup, service initialization, command handling,
+/// background message processing, automatic listening, and graceful shutdown.
 /// </summary>
 class Program
 {
@@ -58,89 +24,72 @@ class Program
     private static TcpPeerHandler? tcpPeerHandler;
     private static ConsoleUI? consoleUI;
     private static CancellationTokenSource? cancellationTokenSource;
-    private static HeartbeatMonitor? heartbeatMonitor;
 
     private static MessageHistory? messageHistory; 
 
     private static PeerDiscovery? peerDiscovery;
-    
-    private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
 
+    /// <summary>
+    /// Initializes the application, starts background tasks, starts peer discovery/listening,
+    /// and runs the main console command loop.
+    /// </summary>
     static async Task Main(string[] args)
     {
         Console.WriteLine("================================");
         Console.WriteLine("| Secure Distributed Messenger |");
         Console.WriteLine("================================");
 
-        // 1. Create CancellationTokenSource for shutdown signaling     X
-        // 2. Create MessageQueue for thread communication              X
-        // 3. Create ConsoleUI for user interface                       X
-        // 4. Create TcpServer for incoming connections                 X
-        // 5. Create TcpClientHandler for outgoing connections          X
-
         cancellationTokenSource = new CancellationTokenSource();
-        messageQueue = new MessageQueue();         //creates message queue guy
-        consoleUI = new ConsoleUI();    // creates a console and put in the message guy
+        messageQueue = new MessageQueue();          // creates message queue guy
+        consoleUI = new ConsoleUI();                // creates a console and put in the message guy
         tcpPeerHandler = new TcpPeerHandler(){localUserName = localUserName};
         messageHistory = new MessageHistory();
-        heartbeatMonitor = new HeartbeatMonitor();
-
-        // 1. TcpServer.OnPeerConnected - handle new incoming connections
-        // 2. TcpServer.OnMessageReceived - handle received messages
-        // 3. TcpServer.OnPeerDisconnected - handle disconnections
-        // 4. TcpClientHandler events (same pattern)
 
         tcpPeerHandler.OnPeerConnected += HandlePeerConnected;
         tcpPeerHandler.OnMessageReceived += HandleMessageReceived;
         tcpPeerHandler.OnPeerDisconnected += peer =>
             Console.WriteLine("Disconnected peer " + peer.Id);
-        
 
-        heartbeatMonitor.OnHeartbeatReceived += peerId =>
+        peerDiscovery = new PeerDiscovery(localUserName, async discoveredPeer =>
         {
-            if(EnableHeartbeatLogging)
-                Console.WriteLine($"Heartbeat received from {peerId}");
-        };
-
-        heartbeatMonitor.OnConnectionFailed += peerId =>
-        {
-            if(EnableHeartbeatLogging)
-                Console.WriteLine($"Heartbeat timeout for {peerId}");
-            tcpPeerHandler?.Disconnect(peerId);
-        };
-        
-        heartbeatMonitor.Start();
-        peerDiscovery = new PeerDiscovery(localUserName, heartbeatMonitor, async discoveredPeer =>
-        {
-            Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id} at {discoveredPeer.Address}:{discoveredPeer.Port}");
-
             if(tcpPeerHandler == null || discoveredPeer.Address == null)
                 return;
 
-            // Check if peer is already in connected list
-            bool alreadyConnected = tcpPeerHandler.GetConnectedPeers()
-                .Any(peer =>
-                    peer.Address != null &&
-                    peer.Address.Equals(discoveredPeer.Address) &&
-                    peer.Port == discoveredPeer.Port);
-
-            if(alreadyConnected)
-                return;
-
-            bool connected = await tcpPeerHandler.ConnectAsync(
-                discoveredPeer.Address.ToString(),
+            tcpPeerHandler.RecordDiscoveredEndpoint(
+                discoveredPeer.Id,
+                discoveredPeer.Address,
                 discoveredPeer.Port
             );
 
-            // Display message indicating successfull auto-connect to new peer
+            if(tcpPeerHandler.HasConnectionWithName(discoveredPeer.Id))
+                return;
+
+            string discoveredHost = discoveredPeer.Address.ToString();
+
+            if(tcpPeerHandler.HasConnectionTo(discoveredHost, discoveredPeer.Port))
+                return;
+
+            // Only initiate connection from one side to avoid duplicate
+            // Smaller ID initiates connection
+            if(string.Compare(localUserName, discoveredPeer.Id, StringComparison.Ordinal) > 0)
+            {
+                Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id}, waiting for it to connect to us.");
+                return;
+            }
+
+            Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id} at {discoveredPeer.Address}:{discoveredPeer.Port}");
+
+            bool connected = await tcpPeerHandler.ConnectAsync(
+                discoveredHost,
+                discoveredPeer.Port
+            );
+
+            // Display successful auto-connects for demo visibility
             if(connected)
                 Console.WriteLine($"[Discovery] Auto-connected to {discoveredPeer.Id}");
         });
 
-        // TODO: Start background threads
-        // 1. Start a thread/task for processing incoming messages
-        // 2. Start a thread/task for sending outgoing messages
-        // Note: TcpServer.Start() will create its own listen thread
+        // Start background tasks for incoming display and outgoing network sends
         List<Task> tasklist =
         [
             Task.Run(ProcessIncomingMessages),  // pcim
@@ -150,6 +99,17 @@ class Program
 
         Console.WriteLine("Type /help for available commands");
         Console.WriteLine($"Local client name: {localUserName}");
+
+        // Assign port to listen on automatically
+        int startupPort;
+        if(args.Length >= 1 && int.TryParse(args[0], out int requestedPort)) {
+            startupPort = requestedPort;
+        }
+        else {
+            startupPort = FindAvailableTcpPort();
+        }
+
+        StartListening(startupPort);
 
         // Main loop - handle user input
         bool running = true;
@@ -165,6 +125,19 @@ class Program
             }
 
             var resulty = consoleUI.ParseCommand(input);
+
+            // Process non-command input as a message to be sent
+            if(!resulty.IsCommand)
+            {
+                messageQueue!.EnqueueOutgoing(new Message
+                {
+                    Type = MessageType.Chat,
+                    Sender = localUserName,
+                    Content = resulty.Message ?? string.Empty
+                });
+                continue;
+            }
+
             switch(resulty.CommandType)
             {
                 case CommandType.Quit:
@@ -175,13 +148,14 @@ class Program
                     if(resulty.Args != null && resulty.Args.Length >= 3 && int.TryParse(resulty.Args[2], out int port))
                     {
                         bool connected = await tcpPeerHandler.ConnectAsync(resulty.Args[1], port);
+
                         if(connected)
                         {
-                            //TODO
+                            Console.WriteLine($"Connected to peer at {resulty.Args[1]}:{port}");
                         }
                         else
                         {
-                            Console.WriteLine($"Couldn't connect to server at {resulty.Args[1]}:{port}"); // This now checks if the port can happen and if not exits nicely
+                            Console.WriteLine($"Couldn't connect to peer at {resulty.Args[1]}:{port}");
                         }
                     }
                     else
@@ -192,10 +166,7 @@ class Program
                 case CommandType.Listen:
                     if(resulty.Args != null && resulty.Args.Length >= 2 && int.TryParse(resulty.Args[1], out int listenPort))
                     {
-                        Console.WriteLine("Starting TCP Server");
-                        tcpPeerHandler.Start(listenPort);
-                        peerDiscovery?.Start(listenPort);
-                        Console.WriteLine($"Peer discovery started for TCP port {listenPort}");
+                        StartListening(listenPort);
                     }
                     else
                     {
@@ -207,7 +178,17 @@ class Program
                     tcpPeerHandler.ListPeers();
                     break;
                 case CommandType.History:
-                    messageHistory.ShowHistory();
+                    if(resulty.Args != null &&
+                        resulty.Args.Length >= 2 &&
+                        string.Equals(resulty.Args[1], "clear", StringComparison.OrdinalIgnoreCase))
+                    {
+                        messageHistory?.Clear();
+                        Console.WriteLine("Message history cleared.");
+                    }
+                    else
+                    {
+                        messageHistory?.ShowHistory();
+                    }
                     break;
                 case CommandType.Help:
                     consoleUI.ShowHelp();
@@ -223,13 +204,15 @@ class Program
                     } else
                     {
                         string room_name = resulty.Args[1];
-                        // create the room
+                        tcpPeerHandler.JoinLocalRoom(room_name);
                         messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.CreateRoom,
                             Sender = localUserName,
-                            Room = room_name
+                            Room = room_name,
+                            Content = $"{localUserName} created {room_name}"
                         });
+                        Console.WriteLine($"Created and joined room {room_name}");
                     }
                     break;
                 case CommandType.JoinRoom:
@@ -242,13 +225,15 @@ class Program
                     } else
                     {
                         string room_name = resulty.Args[1];
-                        // join the room
+                        tcpPeerHandler.JoinLocalRoom(room_name);
                         messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.JoinRoom,
                             Sender = localUserName,
-                            Room = room_name
+                            Room = room_name,
+                            Content = $"{localUserName} joined {room_name}"
                         });
+                        Console.WriteLine($"Joined room {room_name}");
                     }
                     break;
                 case CommandType.LeaveRoom:
@@ -261,13 +246,15 @@ class Program
                     } else
                     {
                         string room_name = resulty.Args[1];
-                        // leave the room
+                        tcpPeerHandler.LeaveLocalRoom(room_name);
                         messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.LeaveRoom,
                             Sender = localUserName,
-                            Room = room_name
+                            Room = room_name,
+                            Content = $"{localUserName} left {room_name}"
                         });
+                        Console.WriteLine($"Left room {room_name}");
                     }
                     break;
                 case CommandType.ListRooms:
@@ -297,25 +284,28 @@ class Program
                         string room_name = resulty.Args[1];
                         string message = string.Join(" ", resulty.Args.Skip(2)); // Send all words after room number arg
 
-                        List<Peer>? peers = tcpPeerHandler.GetPeersInRoom(room_name);
-                        if (peers == null)
+                        if(!tcpPeerHandler.IsInLocalRoom(room_name))
                         {
-                            Console.WriteLine($"No Peers in room {room_name}");
-                        } else
-                        {
-                            // add each one separately to the queue.
-                            foreach (Peer peer in peers)
-                            {
-                                messageQueue!.EnqueueOutgoing(
-                                    tcpPeerHandler.CreateMessage(message, 
-                                    MessageType.RoomChat, room_name));
-                            }
+                            Console.WriteLine($"You are not in room {room_name}. Join it before sending.");
+                            break;
                         }
+
+                        List<Peer>? peers = tcpPeerHandler.GetPeersInRoom(room_name);
+
+                        if(peers == null || peers.Count == 0)
+                        {
+                            Console.WriteLine($"No connected peers are known in room {room_name}.");
+                            break;
+                        }
+
+                        messageQueue!.EnqueueOutgoing(
+                            tcpPeerHandler.CreateMessage(
+                                message,
+                                MessageType.RoomChat,
+                                room_name
+                            )
+                        );
                     }
-                    break;
-                case CommandType.Exit:
-                    Console.WriteLine("Disconnecting all client connections");
-                    tcpPeerHandler?.Stop();
                     break;
                 case CommandType.Unknown:
                     Console.WriteLine(resulty.Message ?? "Unknown command. Use /help.");
@@ -326,27 +316,100 @@ class Program
             }
         }
 
-        // TODO: Implement graceful shutdown
-        // 1. Cancel the CancellationTokenSource
-        // 2. Stop the TcpServer
-        // 3. Disconnect all clients
-        // 4. Complete the MessageQueue
-        // 5. Wait for background threads to finish
-
+        // Shut down background work, network connections, discovery, and message queues
         cancellationTokenSource!.Cancel();
 
         tcpPeerHandler?.Stop();
+        if(peerDiscovery != null)
+            await peerDiscovery.Stop();
         messageQueue?.CompleteAdding();
 
         Task.WaitAll(tasklist);
         Console.WriteLine("Goodbye!");
     }
+
+    /// <summary>
+    /// Finds the first available TCP port for local listening, skipping the UDP discovery port.
+    /// </summary>
+    /// <param name="startingPort">The first port to check.</param>
+    /// <returns>An available TCP port number.</returns>
+    private static int FindAvailableTcpPort(int startingPort = 5000)
+    {
+        int port = startingPort;
+
+        while(port < 6000)
+        {
+            if(port == 5001)
+            {
+                port++;
+                continue;
+            }
+
+            try {
+                using TcpListener testListener = new TcpListener(IPAddress.Any, port);
+                testListener.Start();
+                return port;
+            }
+            catch(SocketException) {
+                port++;
+            }
+        }
+
+        throw new InvalidOperationException("No available TCP port found between 5000 and 5999.");
+    }
+
+    /// <summary>
+    /// Starts TCP listening and peer discovery on the requested port if the app is not already listening.
+    /// </summary>
+    /// <param name="listenPort">The TCP port to listen on.</param>
+    private static void StartListening(int listenPort)
+    {
+        if(tcpPeerHandler == null)
+        {
+            Console.WriteLine("TCP peer handler is not initialized.");
+            return;
+        }
+
+        if(listenPort == 5001)
+        {
+            Console.WriteLine("Port 5001 is reserved for UDP peer discovery. Use a TCP port like 5000, 5002, or 5004.");
+            return;
+        }
+
+        if(tcpPeerHandler.IsListening)
+        {
+            Console.WriteLine($"Already listening on port {tcpPeerHandler.Port}");
+            return;
+        }
+
+        try {
+            Console.WriteLine($"Starting TCP server on port {listenPort}");
+            tcpPeerHandler.Start(listenPort);
+            peerDiscovery?.Start(listenPort);
+            Console.WriteLine($"Peer discovery started for TCP port {listenPort}");
+        }
+        catch(SocketException exception) when (exception.SocketErrorCode == SocketError.AddressAlreadyInUse) {
+            Console.WriteLine($"Port {listenPort} is already in use. Try another port, such as {listenPort + 1} or {listenPort + 2}.");
+        }
+        catch(SocketException exception) {
+            Console.WriteLine($"Could not start listener on port {listenPort}: {exception.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Handles the event raised when a peer connection is established.
+    /// </summary>
+    /// <param name="peer">The connected peer.</param>
     private static void HandlePeerConnected(Peer peer)
     {
         Console.WriteLine($"Connected to Peer {peer}");
-        //TODO add the peer to the heartbeat monitor??
     }
 
+    /// <summary>
+    /// Handles decrypted incoming messages and routes them to room handling, display, or history.
+    /// </summary>
+    /// <param name="peer">The peer that sent the message.</param>
+    /// <param name="message">The decrypted message received from the peer.</param>
     private static void HandleMessageReceived(Peer peer, Message message)
     {
         // ANY MESSAGES TO DISPLAY MUST BE ADDED 
@@ -356,17 +419,15 @@ class Program
         switch(message.Type) // Handle messages differently based on message type
         {
             case MessageType.RoomChat:
-                //todo check if we are in the room (need to implement our_rooms)
-                // first, commented out to get it building for now
-                // if ()
-                // {
-                //     messageQueue!.EnqueueIncoming(message);
-                // }
-                messageQueue!.EnqueueIncoming(message);
-                messageHistory?.SaveMessage(message);
+                if(tcpPeerHandler!.IsInLocalRoom(message.Room))
+                {
+                    messageQueue!.EnqueueIncoming(message);
+                    messageHistory?.SaveMessage(message);
+                }
                 break;
             case MessageType.Chat:
                 messageQueue!.EnqueueIncoming(message);
+                messageHistory?.SaveMessage(message);
                 break;
             case MessageType.JoinRoom:
                 tcpPeerHandler!.AddToRoom(message.Room, peer);
@@ -386,6 +447,10 @@ class Program
         }
     }
 
+    /// <summary>
+    /// Processes messages from the incoming queue and displays them to the console.
+    /// </summary>
+    /// <returns>A completed task when processing stops.</returns>
     private static Task ProcessIncomingMessages()
     {
         while(!cancellationTokenSource!.Token.IsCancellationRequested) //checks that it's not cancelled
@@ -404,9 +469,12 @@ class Program
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Processes messages from the outgoing queue and sends them to connected peers.
+    /// </summary>
+    /// <returns>A task representing the outgoing message processing loop.</returns>
     private static async Task SendOutgoingMessages()
     {
-        //TODO fix this logic.
         while(!cancellationTokenSource!.Token.IsCancellationRequested)
         {
             Message? logicalMessage;
@@ -423,25 +491,27 @@ class Program
             }
 
             var peers = tcpPeerHandler.GetConnectedPeers().ToList();
-            
-            // foreach(var peer in peers)
-            // {
-            //     // this will only really send to the server, but the server
-            //     // will forward to the appropriate client based off of
-            //     // the targetPeerId fieldd
-            //     await tcpPeerHandler.SendAsync(peer.Id, logicalMessage);
-            // } TODO: ensure below loop is implemented correctly
 
-            // Send differently encrypted message to each peer
-            foreach(var peer in peers)
+            bool sentToAtLeastOnePeer = false;
+
+            List<Task<SendResult>> sendTasks = peers.Select(peer => tcpPeerHandler.SendEncryptedMessageAsync(peer, logicalMessage)).ToList();
+
+            SendResult[] results = await Task.WhenAll(sendTasks);
+
+            for(int index = 0; index < peers.Count; index++)
             {
-                SendResult result = await tcpPeerHandler.SendEncryptedMessageAsync(peer, logicalMessage);
-
-                if(result != SendResult.Success)
+                if(results[index] == SendResult.Success)
                 {
-                    Console.WriteLine($"Failed to send message to {peer}.");
+                    sentToAtLeastOnePeer = true;
+                }
+                else
+                {
+                    Console.WriteLine($"Failed to send message to {peers[index]}.");
                 }
             }
+
+            if(sentToAtLeastOnePeer)
+                messageHistory?.SaveMessage(logicalMessage);
         }
     }
 }
