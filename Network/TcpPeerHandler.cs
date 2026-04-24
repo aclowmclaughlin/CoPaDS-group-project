@@ -620,13 +620,13 @@ public class TcpPeerHandler
         }
         if (peers_list == null || peers_list.Count == 0)
         {
-            Console.WriteLine("No Known Peers.");
+            Console.WriteLine("No connected peers.");
             return;
         }
         int i = 0;
         foreach(Peer peer in peers_list)
         {
-            Console.WriteLine($"Peer [{i}]: {peer}");
+            Console.WriteLine($"Connected Peer [{i}]: {peer}");
             i++;
         }
     }
