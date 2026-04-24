@@ -59,7 +59,7 @@ class Program
     private static ConsoleUI? consoleUI;
     private static CancellationTokenSource? cancellationTokenSource;
     private static HeartbeatMonitor? heartbeatMonitor;
-
+    private static PeerDiscovery? peerDiscovery;
     private static MessageHistory? messageHistory; 
 
     
@@ -109,6 +109,19 @@ class Program
         };
         
         heartbeatMonitor.Start();
+
+        peerDiscovery = new PeerDiscovery(localUserName, heartbeatMonitor, async (discoveredPeer) =>
+        {
+            Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id} at port {discoveredPeer.Port}");
+            // try and connect to all the peers 
+            if (tcpPeerHandler != null && discoveredPeer.Address != null)
+            {
+                bool connected = await tcpPeerHandler.ConnectAsync(
+                    discoveredPeer.Address.ToString(), discoveredPeer.Port);
+                if (connected)
+                    Console.WriteLine($"[Discovery] Auto-connected to {discoveredPeer.Id}");
+            }
+        });
 
         // TODO: Start background threads
         // 1. Start a thread/task for processing incoming messages

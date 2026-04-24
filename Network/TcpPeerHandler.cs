@@ -231,6 +231,8 @@ public class TcpPeerHandler
 
             OnPeerConnected?.Invoke(peer);
 
+            await SendRoomsListingToPeer(peer); //hey here's which room im in
+
             _ = Task.Run(() => ReceiveLoop(peer));
             _ = Task.Run(() => HeartbeatLoop(peer));
 
@@ -276,6 +278,8 @@ public class TcpPeerHandler
 
         // Invoke OnPeerConnected event
         OnPeerConnected?.Invoke(peer);
+
+        await SendRoomsListingToPeer(peer); //hey here's which room im in
 
         // Create and start a new Thread running ReceiveLoop for this peer
         var receiveThread = new Thread(async () => await ReceiveLoop(peer));
@@ -403,6 +407,13 @@ public class TcpPeerHandler
     {
         //TODO implement this- should create some string representation
         // of the _our_rooms variable
+
+        string roomsstuff;
+        lock(_roomsLock)
+        {
+            roomsstuff = string.Join(",", _our_rooms);
+        }
+        return CreateMessage(roomsstuff, MessageType.RoomsListing);
     }
 
     public bool HandleRoomsListingMessage(Message roomsListingMessage, Peer senderPeer)
@@ -410,6 +421,19 @@ public class TcpPeerHandler
         //TODO implement this- should unpack the string representation
         // of the Room Listing Message, and add the sender Peer to all the
         // rooms it says it is in.
+
+        if (string.IsNullOrWhiteSpace(roomsListingMessage.Content))
+            return true;
+
+        var rooms = roomsListingMessage.Content.Split(',',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach (var room in rooms)
+        {
+            CreateRoom(room);
+            AddToRoom(room, senderPeer);
+        }
+        return true;
     }
   
     /// <summary>
@@ -525,6 +549,65 @@ public class TcpPeerHandler
             Signature           = signature,
             Timestamp           = unsignedMessage.Timestamp
         };
+    }
+    
+        public async Task SendAsync(string peerId, Message msg)
+    {
+        Peer? peer;
+        lock (_connections_lock)
+        {
+            _connections.TryGetValue(peerId, out peer);
+        }
+        if (peer != null)
+            await SendEncryptedMessageAsync(peer, msg);
+    }
+
+    public async Task JoinRoomAndBroadcast(string roomName)
+    {
+        lock (_roomsLock)
+        {
+            if (!_our_rooms.Contains(roomName))
+                _our_rooms.Add(roomName);
+        }
+        CreateRoom(roomName);
+        var notification = CreateMessage($"{localUserName} joined {roomName}", MessageType.JoinRoom, roomName);
+        await BroadcastAsync(notification);
+    }
+
+        public async Task CreateRoomAndBroadcast(string roomName)
+    {
+        lock (_roomsLock)
+        {
+            if (!_our_rooms.Contains(roomName))
+                _our_rooms.Add(roomName);
+        }
+        CreateRoom(roomName);
+        var notification = CreateMessage($"{localUserName} created {roomName}", MessageType.CreateRoom, roomName);
+        await BroadcastAsync(notification);
+    }
+
+        public async Task LeaveRoomAndBroadcast(string roomName)
+    {
+        lock (_roomsLock)
+        {
+            _our_rooms.Remove(roomName);
+        }
+        var notification = CreateMessage($"{localUserName} left {roomName}", MessageType.LeaveRoom, roomName);
+        await BroadcastAsync(notification);
+    }
+
+        public bool IsInRoom(string roomName)
+    {
+        lock (_roomsLock)
+        {
+            return _our_rooms.Contains(roomName);
+        }
+    }
+
+        public async Task SendRoomsListingToPeer(Peer peer)
+    {
+        var listing = CreateRoomsListingMessage();
+        await SendAsync(peer, listing);
     }
 
     public void Disconnect(string peerId)
