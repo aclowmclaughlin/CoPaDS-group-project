@@ -367,6 +367,7 @@ class Program
                 break;
             case MessageType.Chat:
                 messageQueue!.EnqueueIncoming(message);
+                messageHistory?.SaveMessage(message);
                 break;
             case MessageType.JoinRoom:
                 tcpPeerHandler!.AddToRoom(message.Room, peer);
@@ -432,16 +433,25 @@ class Program
             //     await tcpPeerHandler.SendAsync(peer.Id, logicalMessage);
             // } TODO: ensure below loop is implemented correctly
 
+            bool sentToAtLeastOnePeer = false;
+
             // Send differently encrypted message to each peer
             foreach(var peer in peers)
             {
                 SendResult result = await tcpPeerHandler.SendEncryptedMessageAsync(peer, logicalMessage);
 
-                if(result != SendResult.Success)
+                if(result == SendResult.Success)
+                {
+                    sentToAtLeastOnePeer = true; // Used to track message saving
+                }
+                else
                 {
                     Console.WriteLine($"Failed to send message to {peer}.");
                 }
             }
+
+            if(sentToAtLeastOnePeer)
+                messageHistory?.SaveMessage(logicalMessage);
         }
     }
 }
