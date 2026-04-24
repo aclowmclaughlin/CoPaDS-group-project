@@ -101,6 +101,12 @@ class Program
             if(tcpPeerHandler == null || discoveredPeer.Address == null)
                 return;
 
+            tcpPeerHandler.RecordDiscoveredEndpoint(
+                discoveredPeer.Id,
+                discoveredPeer.Address,
+                discoveredPeer.Port
+            );
+
             if(tcpPeerHandler.HasConnectionWithName(discoveredPeer.Id))
                 return;
 

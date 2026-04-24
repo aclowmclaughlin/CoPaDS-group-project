@@ -16,11 +16,14 @@ namespace SecureMessenger.Network;
 public class TcpPeerHandler
 {
     private TcpListener? _listener;
+
     private readonly Dictionary<string, Peer> _connections = new();
+    private readonly object _connections_lock = new();
+
+    private readonly Dictionary<string, (IPAddress Address, int Port)> _knownPeerEndpoints = new();
 
     public string localUserName = string.Empty;
 
-    private readonly object _connections_lock = new();
     private CancellationTokenSource? _cancellationTokenSource;
     private Thread? _listenThread;
 
@@ -403,7 +406,10 @@ public class TcpPeerHandler
                 }
 
                 if(!string.IsNullOrWhiteSpace(message.Sender) && string.IsNullOrWhiteSpace(peer.Name))
+                {
                     peer.Name = message.Sender;
+                    ApplyDiscoveredEndpoint(peer);
+                }
 
                 // Heartbeat update
                 if(message.Type == MessageType.Heartbeat)
@@ -846,6 +852,48 @@ public class TcpPeerHandler
             return _connections.Values.Any(peer =>
                 peer.IsConnected &&
                 string.Equals(peer.Name, peerName, StringComparison.Ordinal));
+        }
+    }
+
+    /// <summary>
+    /// Records the listening endpoint discovered for a peer and updates any matching active connection.
+    /// </summary>
+    /// <param name="peerName">The discovered peer name.</param>
+    /// <param name="address">The peer IP address.</param>
+    /// <param name="port">The peer TCP listening port.</param>
+    public void RecordDiscoveredEndpoint(string peerName, IPAddress address, int port)
+    {
+        lock(_connections_lock)
+        {
+            _knownPeerEndpoints[peerName] = (address, port);
+
+            foreach(Peer peer in _connections.Values)
+            {
+                if(string.Equals(peer.Name, peerName, StringComparison.Ordinal))
+                {
+                    peer.Address = address;
+                    peer.Port = port;
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Applies a previously discovered listening endpoint to a connected peer when its name becomes known.
+    /// </summary>
+    /// <param name="peer">The peer to update.</param>
+    private void ApplyDiscoveredEndpoint(Peer peer)
+    {
+        if(string.IsNullOrWhiteSpace(peer.Name))
+            return;
+
+        lock(_connections_lock)
+        {
+            if(_knownPeerEndpoints.TryGetValue(peer.Name, out var endpoint))
+            {
+                peer.Address = endpoint.Address;
+                peer.Port = endpoint.Port;
+            }
         }
     }
 
