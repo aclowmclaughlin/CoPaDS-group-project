@@ -11,11 +11,11 @@ public enum MessageType
     Chat,
     RoomChat,
 
-    // Room commandsd
+    // Room commands
     CreateRoom,
     JoinRoom,
     LeaveRoom,
-
+    RoomsListing, // Lists all rooms the peer is in
     Heartbeat
 }
 
