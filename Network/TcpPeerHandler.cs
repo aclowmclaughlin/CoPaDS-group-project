@@ -231,6 +231,8 @@ public class TcpPeerHandler
 
             OnPeerConnected?.Invoke(peer);
 
+            await SendEncryptedMessageAsync(peer, CreateRoomsListingMessage());
+
             _ = Task.Run(() => ReceiveLoop(peer));
             _ = Task.Run(() => HeartbeatLoop(peer));
 
@@ -276,6 +278,8 @@ public class TcpPeerHandler
 
         // Invoke OnPeerConnected event
         OnPeerConnected?.Invoke(peer);
+        
+        await SendEncryptedMessageAsync(peer, CreateRoomsListingMessage()); 
 
         // Create and start a new Thread running ReceiveLoop for this peer
         var receiveThread = new Thread(async () => await ReceiveLoop(peer));
@@ -433,6 +437,37 @@ public class TcpPeerHandler
         }
 
         return true;
+    }
+
+    public bool JoinLocalRoom(string roomName)
+    {
+        CreateRoom(roomName);
+
+        lock(_roomsLock)
+        {
+            if(!_our_rooms.Contains(roomName))
+                _our_rooms.Add(roomName);
+        }
+
+        return true;
+    }
+
+    public bool LeaveLocalRoom(string roomName)
+    {
+        lock(_roomsLock)
+        {
+            _our_rooms.Remove(roomName);
+        }
+
+        return true;
+    }
+
+    public bool IsInLocalRoom(string roomName)
+    {
+        lock(_roomsLock)
+        {
+            return _our_rooms.Contains(roomName);
+        }
     }
   
     /// <summary>

@@ -223,13 +223,15 @@ class Program
                     } else
                     {
                         string room_name = resulty.Args[1];
-                        // create the room
+                        tcpPeerHandler.JoinLocalRoom(room_name);
                         messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.CreateRoom,
                             Sender = localUserName,
-                            Room = room_name
+                            Room = room_name,
+                            Content = $"{localUserName} created {room_name}"
                         });
+                        Console.WriteLine($"Created and joined room {room_name}");
                     }
                     break;
                 case CommandType.JoinRoom:
@@ -242,13 +244,15 @@ class Program
                     } else
                     {
                         string room_name = resulty.Args[1];
-                        // join the room
+                        tcpPeerHandler.JoinLocalRoom(room_name);
                         messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.JoinRoom,
                             Sender = localUserName,
-                            Room = room_name
+                            Room = room_name,
+                            Content = $"{localUserName} joined {room_name}"
                         });
+                        Console.WriteLine($"Joined room {room_name}");
                     }
                     break;
                 case CommandType.LeaveRoom:
@@ -261,13 +265,15 @@ class Program
                     } else
                     {
                         string room_name = resulty.Args[1];
-                        // leave the room
+                        tcpPeerHandler.LeaveLocalRoom(room_name);
                         messageQueue!.EnqueueOutgoing(new Message
                         {
                             Type = MessageType.LeaveRoom,
                             Sender = localUserName,
-                            Room = room_name
+                            Room = room_name,
+                            Content = $"{localUserName} left {room_name}"
                         });
+                        Console.WriteLine($"Left room {room_name}");
                     }
                     break;
                 case CommandType.ListRooms:
@@ -297,20 +303,27 @@ class Program
                         string room_name = resulty.Args[1];
                         string message = string.Join(" ", resulty.Args.Skip(2)); // Send all words after room number arg
 
-                        List<Peer>? peers = tcpPeerHandler.GetPeersInRoom(room_name);
-                        if (peers == null)
+                        if(!tcpPeerHandler.IsInLocalRoom(room_name))
                         {
-                            Console.WriteLine($"No Peers in room {room_name}");
-                        } else
-                        {
-                            // add each one separately to the queue.
-                            foreach (Peer peer in peers)
-                            {
-                                messageQueue!.EnqueueOutgoing(
-                                    tcpPeerHandler.CreateMessage(message, 
-                                    MessageType.RoomChat, room_name));
-                            }
+                            Console.WriteLine($"You are not in room {room_name}. Join it before sending.");
+                            break;
                         }
+
+                        List<Peer>? peers = tcpPeerHandler.GetPeersInRoom(room_name);
+
+                        if(peers == null || peers.Count == 0)
+                        {
+                            Console.WriteLine($"No connected peers are known in room {room_name}.");
+                            break;
+                        }
+
+                        messageQueue!.EnqueueOutgoing(
+                            tcpPeerHandler.CreateMessage(
+                                message,
+                                MessageType.RoomChat,
+                                room_name
+                            )
+                        );
                     }
                     break;
                 case CommandType.Exit:
@@ -356,14 +369,11 @@ class Program
         switch(message.Type) // Handle messages differently based on message type
         {
             case MessageType.RoomChat:
-                //todo check if we are in the room (need to implement our_rooms)
-                // first, commented out to get it building for now
-                // if ()
-                // {
-                //     messageQueue!.EnqueueIncoming(message);
-                // }
-                messageQueue!.EnqueueIncoming(message);
-                messageHistory?.SaveMessage(message);
+                if(tcpPeerHandler!.IsInLocalRoom(message.Room))
+                {
+                    messageQueue!.EnqueueIncoming(message);
+                    messageHistory?.SaveMessage(message);
+                }
                 break;
             case MessageType.Chat:
                 messageQueue!.EnqueueIncoming(message);
