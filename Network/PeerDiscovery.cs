@@ -121,12 +121,18 @@ public class PeerDiscovery
         if (peerId == LocalPeerId) { return; }
 
         // create a new Peer object
-        Peer this_peer = new Peer(){Port=port, Id=peerId};
+        Peer discoveredPeer = new Peer
+        {
+            Id = peerId,
+            Address = senderAddress,
+            Port = port,
+            IsConnected = false
+        };
         
         // check if peer has not been seen before
-        if(_knownPeers.TryAdd(peerId, this_peer))
+        if(_knownPeers.TryAdd(peerId, discoveredPeer))
         {
-            OnPeerDiscovered!.Invoke(this_peer);
+            OnPeerDiscovered!.Invoke(discoveredPeer);
         }
 
         // Record that we did receive a heartbeat from the peer.
