@@ -171,10 +171,6 @@ public class PeerDiscovery
         {
             _knownPeers[peerId] = discoveredPeer;
         }
-
-        // Record that we did receive a heartbeat from the peer.
-        heartbeatMonitor.RecordHeartbeat(peerId);
-        
     }
 
     /// <summary>

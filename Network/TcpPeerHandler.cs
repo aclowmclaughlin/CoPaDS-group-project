@@ -37,6 +37,7 @@ public class TcpPeerHandler
     public event Action<Peer, Message>? OnMessageReceived;
 
     private readonly HeartbeatMonitor _heartbeatMonitor = new();
+    private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
 
     private readonly ReconnectionPolicy _reconnectionPolicy;
 
@@ -46,7 +47,18 @@ public class TcpPeerHandler
     public TcpPeerHandler()
     {
         ourMessageSigner = new MessageSigner(ourRSA.Rsa);
-        _heartbeatMonitor.OnConnectionFailed += HandleConnectionFailure;
+
+        _heartbeatMonitor.OnHeartbeatReceived += peerId => {
+            if(EnableHeartbeatLogging)
+                Console.WriteLine($"Heartbeat received from {GetPeerDisplayName(peerId)}");
+        };
+
+        _heartbeatMonitor.OnConnectionFailed += peerId => {
+            if(EnableHeartbeatLogging)
+                Console.WriteLine($"Heartbeat timeout for {GetPeerDisplayName(peerId)}");
+            HandleConnectionFailure(peerId);
+        };
+
         _reconnectionPolicy = new ReconnectionPolicy(this);
     }
 
@@ -767,6 +779,34 @@ public class TcpPeerHandler
         lock (_connections_lock)
         {
             return _connections.Values.ToList();
+        }
+    }
+
+    private string GetPeerDisplayName(string peerId)
+    {
+        lock(_connections_lock)
+        {
+            if(_connections.TryGetValue(peerId, out Peer? peer))
+            {
+                if(!string.IsNullOrWhiteSpace(peer.Name))
+                {
+                    return peer.Name;
+                }
+
+                return $"{peer.Address}:{peer.Port}";
+            }
+        }
+
+        return peerId;
+    }
+
+    public bool HasConnectionWithName(string peerName)
+    {
+        lock(_connections_lock)
+        {
+            return _connections.Values.Any(peer =>
+                peer.IsConnected &&
+                string.Equals(peer.Name, peerName, StringComparison.Ordinal));
         }
     }
 

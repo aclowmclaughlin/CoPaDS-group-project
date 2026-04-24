@@ -63,8 +63,6 @@ class Program
     private static MessageHistory? messageHistory; 
 
     private static PeerDiscovery? peerDiscovery;
-    
-    private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
 
     static async Task Main(string[] args)
     {
@@ -94,22 +92,9 @@ class Program
         tcpPeerHandler.OnMessageReceived += HandleMessageReceived;
         tcpPeerHandler.OnPeerDisconnected += peer =>
             Console.WriteLine("Disconnected peer " + peer.Id);
-        
 
-        heartbeatMonitor.OnHeartbeatReceived += peerId =>
-        {
-            if(EnableHeartbeatLogging)
-                Console.WriteLine($"Heartbeat received from {peerId}");
-        };
-
-        heartbeatMonitor.OnConnectionFailed += peerId =>
-        {
-            if(EnableHeartbeatLogging)
-                Console.WriteLine($"Heartbeat timeout for {peerId}");
-            tcpPeerHandler?.Disconnect(peerId);
-        };
-        
         heartbeatMonitor.Start();
+
         peerDiscovery = new PeerDiscovery(localUserName, heartbeatMonitor, async discoveredPeer =>
         {
             Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id} at {discoveredPeer.Address}:{discoveredPeer.Port}");
