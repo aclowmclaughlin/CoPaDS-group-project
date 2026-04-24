@@ -401,15 +401,38 @@ public class TcpPeerHandler
 
     public Message CreateRoomsListingMessage()
     {
-        //TODO implement this- should create some string representation
-        // of the _our_rooms variable
+        List<string> roomsSnapshot;
+
+        lock(_roomsLock)
+        {
+            roomsSnapshot = _our_rooms.ToList();
+        }
+
+        return CreateMessage(string.Join(",", roomsSnapshot), MessageType.RoomsListing);
     }
 
     public bool HandleRoomsListingMessage(Message roomsListingMessage, Peer senderPeer)
     {
-        //TODO implement this- should unpack the string representation
-        // of the Room Listing Message, and add the sender Peer to all the
-        // rooms it says it is in.
+        if(roomsListingMessage.Type != MessageType.RoomsListing)
+        {
+            return false;
+        }
+
+        if(string.IsNullOrWhiteSpace(roomsListingMessage.Content))
+        {
+            return true;
+        }
+
+        string[] roomNames = roomsListingMessage.Content
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+        foreach(string roomName in roomNames)
+        {
+            CreateRoom(roomName);
+            AddToRoom(roomName, senderPeer);
+        }
+
+        return true;
     }
   
     /// <summary>

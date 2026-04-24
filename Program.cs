@@ -329,11 +329,13 @@ class Program
         {
             case MessageType.RoomChat:
                 //todo check if we are in the room (need to implement our_rooms)
-                // first
-                if ()
-                {
-                    messageQueue!.EnqueueIncoming(message);
-                }
+                // first, commented out to get it building for now
+                // if ()
+                // {
+                //     messageQueue!.EnqueueIncoming(message);
+                // }
+                messageQueue!.EnqueueIncoming(message);
+                messageHistory?.SaveMessage(message);
                 break;
             case MessageType.Chat:
                 messageQueue!.EnqueueIncoming(message);
