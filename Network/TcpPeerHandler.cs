@@ -37,7 +37,7 @@ public class TcpPeerHandler
     public event Action<Peer, Message>? OnMessageReceived;
 
     private readonly HeartbeatMonitor _heartbeatMonitor = new();
-    private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
+    private const bool EnableHeartbeatLogging = false; // Toggle to disable console spam
 
     private readonly ReconnectionPolicy _reconnectionPolicy;
 
@@ -108,7 +108,7 @@ public class TcpPeerHandler
                     // If pending, accept the connection with AcceptTcpClient()
                     var client = _listener.AcceptTcpClient();
                     // Call HandleNewConnection with the new client
-                    HandleNewConnection(client);
+                    _ = Task.Run(() => HandleNewConnection(client));
                 }
                 else
                 {
@@ -269,55 +269,90 @@ public class TcpPeerHandler
     /// <summary>
     /// Handle a new incoming connection by creating a Peer and starting its receive thread.
     /// </summary>
-    private async void HandleNewConnection(TcpClient client)
+    private async Task HandleNewConnection(TcpClient client)
     {
-        // Create a new Peer object with:
-        // - Client = the TcpClient
-        // - Stream = client.GetStream()
-        // - Address = extracted from client.Client.RemoteEndPoint
-        // - Port = extracted from client.Client.RemoteEndPoint
-        // - IsConnected = true
-        var peer = new Peer {
-            Client = client,
-            Stream = client.GetStream(),
-            Address = ((IPEndPoint)client.Client.RemoteEndPoint!).Address,
-            Port = ((IPEndPoint)client.Client.RemoteEndPoint!).Port,
-            IsConnected = true
-        };
+        Peer? peer = null;
+        bool connectionAccepted = false;
 
-        await ExchangeKeyReceiver(peer);
-
-        // Add the peer to _connectedPeers (with proper locking)
-        lock(_connections_lock)
-        {
-            bool alreadyConnected = _connections.Values.Any(existingPeer =>
-                existingPeer.Address != null &&
-                peer.Address != null &&
-                existingPeer.Address.Equals(peer.Address) &&
-                existingPeer.Port == peer.Port &&
-                existingPeer.IsConnected);
-
-            if(alreadyConnected)
+        try {
+            // A peer object is created before the handshake so failures can still be cleaned up
+            peer = new Peer
             {
-                Console.WriteLine($"Duplicate incoming connection from {peer.Address}:{peer.Port}; closing new connection.");
-                peer.IsConnected = false;
-                peer.Stream?.Dispose();
-                peer.Client?.Dispose();
-                return;
+                Client = client,
+                Stream = client.GetStream(),
+                Address = ((IPEndPoint)client.Client.RemoteEndPoint!).Address,
+                Port = ((IPEndPoint)client.Client.RemoteEndPoint!).Port,
+                IsConnected = true
+            };
+
+            // The incoming side receives the initiator key data and completes AES setup
+            await ExchangeKeyReceiver(peer);
+
+            // The new peer is only registered after the handshake succeeds
+            lock(_connections_lock)
+            {
+                bool alreadyConnected = _connections.Values.Any(existingPeer =>
+                    existingPeer.Address != null &&
+                    peer.Address != null &&
+                    existingPeer.Address.Equals(peer.Address) &&
+                    existingPeer.Port == peer.Port &&
+                    existingPeer.IsConnected);
+
+                if(alreadyConnected)
+                {
+                    Console.WriteLine($"Duplicate incoming connection from {peer.Address}:{peer.Port}; closing new connection.");
+                    return;
+                }
+
+                _connections[peer.Id] = peer;
+                connectionAccepted = true;
             }
 
-            _connections[peer.Id] = peer;
+            // Connection callbacks and background loops start only after registration
+            OnPeerConnected?.Invoke(peer);
+
+            await SendEncryptedMessageAsync(peer, CreateRoomsListingMessage());
+
+            _ = Task.Run(() => ReceiveLoop(peer));
+            _ = Task.Run(() => HeartbeatLoop(peer));
+
+            _heartbeatMonitor.StartMonitoring(peer.Id);
         }
+        catch(Exception exception) when (
+            exception is EndOfStreamException ||
+            exception is IOException ||
+            exception is ObjectDisposedException ||
+            exception is SocketException ||
+            exception is System.Security.Cryptography.CryptographicException ||
+            exception is InvalidOperationException) {
+            string endpoint = "unknown endpoint";
 
-        // Invoke OnPeerConnected event
-        OnPeerConnected?.Invoke(peer);
-        
-        await SendEncryptedMessageAsync(peer, CreateRoomsListingMessage()); 
+            try {
+                // The endpoint is used only for a useful diagnostic message
+                endpoint = client.Client.RemoteEndPoint?.ToString() ?? endpoint;
+            }
+            catch(ObjectDisposedException) {
+                // The socket may already be disposed after a failed handshake
+            }
 
-        _ = Task.Run(() => ReceiveLoop(peer));
-        _ = Task.Run(() => HeartbeatLoop(peer));
-
-        _heartbeatMonitor.StartMonitoring(peer.Id);
+            Console.WriteLine($"Incoming connection from {endpoint} failed during handshake: {exception.Message}");
+        }
+        finally {
+            if(!connectionAccepted)
+            {
+                // Failed or duplicate handshakes are closed without taking down the app
+                if(peer != null)
+                {
+                    peer.IsConnected = false;
+                    peer.Stream?.Dispose();
+                    peer.Client?.Dispose();
+                }
+                else
+                {
+                    client.Dispose();
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -572,8 +607,9 @@ public class TcpPeerHandler
             return SendResult.PeerDisconnected;
         }
 
-        try
-        {
+        await peer.SendSemaphore.WaitAsync();
+
+        try {
             using var writer = new StreamWriter(peer.Stream, leaveOpen: true);
             string serializedMessage = JsonSerializer.Serialize(msg);
             string totalMessage = serializedMessage.Length + "\n" + serializedMessage;
@@ -583,17 +619,17 @@ public class TcpPeerHandler
 
             return SendResult.Success;
         }
-        catch(IOException)
-        {
+        catch(IOException) {
             return SendResult.SendFailed;
         }
-        catch(ObjectDisposedException)
-        {
+        catch(ObjectDisposedException) {
             return SendResult.PeerDisconnected;
         }
-        catch(SocketException)
-        {
+        catch(SocketException) {
             return SendResult.SendFailed;
+        }
+        finally {
+            peer.SendSemaphore.Release();
         }
     }
 
@@ -701,17 +737,20 @@ public class TcpPeerHandler
     /// </summary>
     private void DisconnectPeer(Peer peer)
     {
-        // Set peer.IsConnected to false
-        peer.IsConnected = false;
+        lock(_connections_lock)
+        {
+            if(!peer.IsConnected && !_connections.ContainsKey(peer.Id))
+                return;
+
+            peer.IsConnected = false;
+            _connections.Remove(peer.Id);
+        }
+
+        _heartbeatMonitor.StopMonitoring(peer.Id);
+
         // Dispose the peer's Client and Stream
         peer.Client?.Dispose();
         peer.Stream?.Dispose();
-
-        // Remove the peer from _connectedPeers (with proper locking)
-        lock(_connections_lock)
-        {
-            _connections.Remove(peer.Id);
-        }
 
         // Remove the peer from all rooms
         lock (_roomsLock)

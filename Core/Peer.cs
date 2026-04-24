@@ -23,6 +23,7 @@ public class Peer
     // Network connection
     public TcpClient? Client { get; set; }
     public NetworkStream? Stream { get; set; }
+    public SemaphoreSlim SendSemaphore { get; } = new(1, 1);
 
     // Sprint 2: Per-session encryption keys
     public byte[]? AesKey { get; set; }

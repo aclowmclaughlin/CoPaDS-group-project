@@ -25,6 +25,7 @@ public class MessageHistory
     private readonly string _historyFile;
     private readonly List<Message> _messages = new();
     private readonly object _lock = new();
+    private static readonly Mutex _fileMutex = new(false, "SecureMessengerMessageHistoryFileMutex");
 
     /// <summary>
     /// Create a MessageHistory with optional custom file path.
@@ -54,26 +55,28 @@ public class MessageHistory
     /// </summary>
     public void Load()
     {
-        try
+        RunWithFileLock(() =>
         {
-            if (File.Exists(_historyFile))
-            {
-                var json = File.ReadAllText(_historyFile);
-                var messages = JsonSerializer.Deserialize<List<Message>>(json);
-                if (messages != null)
+            try {
+                if(File.Exists(_historyFile))
                 {
-                    lock (_lock)
+                    var json = File.ReadAllText(_historyFile);
+                    var messages = JsonSerializer.Deserialize<List<Message>>(json);
+
+                    if(messages != null)
                     {
-                        _messages.Clear();
-                        _messages.AddRange(messages);
+                        lock(_lock)
+                        {
+                            _messages.Clear();
+                            _messages.AddRange(messages);
+                        }
                     }
                 }
             }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"History won't load ;() : {ex.Message}");
-        }
+            catch(Exception ex) {
+                Console.WriteLine($"History won't load ;() : {ex.Message}");
+            }
+        });
     }
 
     /// <summary>
@@ -81,18 +84,20 @@ public class MessageHistory
     /// </summary>
     private void PersistToFile()
     {
-        try
+        RunWithFileLock(() =>
         {
-            var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions
-            {
-                WriteIndented = true
-            });
-            File.WriteAllText(_historyFile, json);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"History not saved ;() : {ex.Message}");
-        }
+            try {
+                var json = JsonSerializer.Serialize(_messages, new JsonSerializerOptions
+                {
+                    WriteIndented = true
+                });
+
+                File.WriteAllText(_historyFile, json);
+            }
+            catch(Exception ex) {
+                Console.WriteLine($"History not saved ;() : {ex.Message}");
+            }
+        });
     }
 
     /// <summary>
@@ -106,6 +111,31 @@ public class MessageHistory
             return limit.HasValue
                 ?messages.Take(limit.Value).ToList():messages.ToList();
                 //if message is good we add the limit, if not we just shove the msg on list
+        }
+    }
+
+    private static void RunWithFileLock(Action fileAction)
+    {
+        bool lockTaken = false;
+
+        try {
+            try {
+                lockTaken = _fileMutex.WaitOne(TimeSpan.FromSeconds(5));
+            }
+            catch(AbandonedMutexException) {
+                lockTaken = true;
+            }
+
+            if(!lockTaken) {
+                Console.WriteLine("History file is busy; skipping this history update.");
+                return;
+            }
+
+            fileAction();
+        }
+        finally {
+            if(lockTaken)
+                _fileMutex.ReleaseMutex();
         }
     }
 
@@ -127,13 +157,14 @@ public class MessageHistory
     /// </summary>
     public void Clear()
     {
-        lock(_lock)
+        RunWithFileLock(() =>
         {
-            _messages.Clear();
-            if (File.Exists(_historyFile))
+            lock(_lock)
             {
-                File.Delete(_historyFile);
+                _messages.Clear();
+                if(File.Exists(_historyFile))
+                    File.Delete(_historyFile);
             }
-        }
+        });
     }
 }

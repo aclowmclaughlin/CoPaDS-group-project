@@ -220,7 +220,17 @@ class Program
                     tcpPeerHandler.ListPeers();
                     break;
                 case CommandType.History:
-                    messageHistory.ShowHistory();
+                    if(resulty.Args != null &&
+                        resulty.Args.Length >= 2 &&
+                        string.Equals(resulty.Args[1], "clear", StringComparison.OrdinalIgnoreCase))
+                    {
+                        messageHistory?.Clear();
+                        Console.WriteLine("Message history cleared.");
+                    }
+                    else
+                    {
+                        messageHistory?.ShowHistory();
+                    }
                     break;
                 case CommandType.Help:
                     consoleUI.ShowHelp();
