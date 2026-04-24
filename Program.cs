@@ -62,6 +62,7 @@ class Program
 
     private static MessageHistory? messageHistory; 
 
+    private static PeerDiscovery? peerDiscovery;
     
     private const bool EnableHeartbeatLogging = true; // Toggle to disable console spam
 
@@ -109,6 +110,32 @@ class Program
         };
         
         heartbeatMonitor.Start();
+        peerDiscovery = new PeerDiscovery(localUserName, heartbeatMonitor, async discoveredPeer =>
+        {
+            Console.WriteLine($"[Discovery] Found peer {discoveredPeer.Id} at {discoveredPeer.Address}:{discoveredPeer.Port}");
+
+            if(tcpPeerHandler == null || discoveredPeer.Address == null)
+                return;
+
+            // Check if peer is already in connected list
+            bool alreadyConnected = tcpPeerHandler.GetConnectedPeers()
+                .Any(peer =>
+                    peer.Address != null &&
+                    peer.Address.Equals(discoveredPeer.Address) &&
+                    peer.Port == discoveredPeer.Port);
+
+            if(alreadyConnected)
+                return;
+
+            bool connected = await tcpPeerHandler.ConnectAsync(
+                discoveredPeer.Address.ToString(),
+                discoveredPeer.Port
+            );
+
+            // Display message indicating successfull auto-connect to new peer
+            if(connected)
+                Console.WriteLine($"[Discovery] Auto-connected to {discoveredPeer.Id}");
+        });
 
         // TODO: Start background threads
         // 1. Start a thread/task for processing incoming messages
@@ -167,7 +194,8 @@ class Program
                     {
                         Console.WriteLine("Starting TCP Server");
                         tcpPeerHandler.Start(listenPort);
-                        //TODO maybe also start the peer discovery?
+                        peerDiscovery?.Start(listenPort);
+                        Console.WriteLine($"Peer discovery started for TCP port {listenPort}");
                     }
                     else
                     {
