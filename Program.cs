@@ -117,18 +117,13 @@ class Program
             if(tcpPeerHandler == null || discoveredPeer.Address == null)
                 return;
 
-            // Check if peer is already in connected list
-            bool alreadyConnected = tcpPeerHandler.GetConnectedPeers()
-                .Any(peer =>
-                    peer.Address != null &&
-                    peer.Address.Equals(discoveredPeer.Address) &&
-                    peer.Port == discoveredPeer.Port);
+            string discoveredHost = discoveredPeer.Address.ToString();
 
-            if(alreadyConnected)
+            if(tcpPeerHandler.HasConnectionTo(discoveredHost, discoveredPeer.Port))
                 return;
 
             bool connected = await tcpPeerHandler.ConnectAsync(
-                discoveredPeer.Address.ToString(),
+                discoveredHost,
                 discoveredPeer.Port
             );
 

@@ -204,7 +204,12 @@ public class TcpPeerHandler
     /// </summary>
     public async Task<bool> ConnectAsync(string host, int port)
     {
-        //TODO: add error other handling? (cringe)
+        if(HasConnectionTo(host, port))
+        {
+            Console.WriteLine($"Already connected to {host}:{port}");
+            return true;
+        }
+
         try
         {
             var client = new TcpClient();
@@ -273,7 +278,23 @@ public class TcpPeerHandler
         // Add the peer to _connectedPeers (with proper locking)
         lock(_connections_lock)
         {
-            _connections.Add(peer.Id, peer);
+            bool alreadyConnected = _connections.Values.Any(existingPeer =>
+                existingPeer.Address != null &&
+                peer.Address != null &&
+                existingPeer.Address.Equals(peer.Address) &&
+                existingPeer.Port == peer.Port &&
+                existingPeer.IsConnected);
+
+            if(alreadyConnected)
+            {
+                Console.WriteLine($"Duplicate incoming connection from {peer.Address}:{peer.Port}; closing new connection.");
+                peer.IsConnected = false;
+                peer.Stream?.Dispose();
+                peer.Client?.Dispose();
+                return;
+            }
+
+            _connections[peer.Id] = peer;
         }
 
         // Invoke OnPeerConnected event
@@ -746,6 +767,40 @@ public class TcpPeerHandler
         lock (_connections_lock)
         {
             return _connections.Values.ToList();
+        }
+    }
+
+    // Check if given host and port combo already exists as a connection, used to avoid duplicates
+    public bool HasConnectionTo(string host, int port)
+    {
+        IPAddress? targetAddress = null;
+
+        if(host == "localhost")
+            host = "127.0.0.1";
+
+        if(!IPAddress.TryParse(host, out targetAddress))
+        {
+            try
+            {
+                IPAddress[] addresses = Dns.GetHostAddresses(host);
+                targetAddress = addresses.FirstOrDefault(address => address.AddressFamily == AddressFamily.InterNetwork);
+            }
+            catch(SocketException)
+            {
+                return false;
+            }
+        }
+
+        if(targetAddress == null)
+            return false;
+
+        lock(_connections_lock)
+        {
+            return _connections.Values.Any(peer =>
+                peer.Address != null &&
+                peer.Address.Equals(targetAddress) &&
+                peer.Port == port &&
+                peer.IsConnected);
         }
     }
 
