@@ -273,13 +273,56 @@ class Program
                     }
                     break;
                 case CommandType.MessageRoom:
-                    if(resulty.Args == null 
-                        || resulty.Args.Length < 3
-                        || !resulty.Args[1].StartsWith('#'))
+                    if(resulty.Args == null || resulty.Args.Length < 3)
+                    {
+                        Console.WriteLine("Invalid arguments for /msg. Usage: /msg #<room> message OR /msg @<peerIndex> message");
+                        break;
+                    }
+                    if(resulty.Args[1].StartsWith('@'))
+                    {
+                        string peerIndexText = resulty.Args[1][1..];
+
+                        if(!int.TryParse(peerIndexText, out int peerIndex))
+                        {
+                            Console.WriteLine("Invalid peer index. Usage: /msg @<peerIndex> message");
+                            break;
+                        }
+
+                        Peer? peer = tcpPeerHandler.GetPeerByIndex(peerIndex);
+
+                        if(peer == null)
+                        {
+                            Console.WriteLine($"No connected peer found at index {peerIndex}. Use /peers to see valid indexes.");
+                            break;
+                        }
+
+                        string directMessageContent = string.Join(" ", resulty.Args.Skip(2));
+
+                        Message directMessage = tcpPeerHandler.CreateMessage(
+                            $"[DM] {directMessageContent}",
+                            MessageType.Chat
+                        );
+
+                        SendResult result = await tcpPeerHandler.SendEncryptedMessageAsync(peer, directMessage);
+
+                        if(result == SendResult.Success)
+                        {
+                            messageHistory?.SaveMessage(directMessage);
+                            Console.WriteLine($"Direct message sent to peer [{peerIndex}].");
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Failed to send direct message to peer [{peerIndex}].");
+                        }
+
+                        break;
+                    }
+                    else if(resulty.Args[1].StartsWith('#'))
                     {
                         Console.WriteLine("Invalid arguments for /msg. Usage: /msg #<room> message");
                         break;
-                    } else
+                    }
+                    else
                     {
                         string room_name = resulty.Args[1];
                         string message = string.Join(" ", resulty.Args.Skip(2)); // Send all words after room number arg

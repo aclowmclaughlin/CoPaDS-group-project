@@ -10,6 +10,7 @@ public enum MessageType
 {
     // End-to-end peer messages
     Chat,
+    DirectChat,
     RoomChat,
 
     // Room and connection-control messages

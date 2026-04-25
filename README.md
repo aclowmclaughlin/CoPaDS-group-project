@@ -70,7 +70,9 @@ Each instance should choose a different available TCP port automatically.
 - `/leave #<room>` - Leave a room
 - `/rooms` - List known rooms
 - `/msg #<room> <message>` - Send a room message
-- Any text without `/` - Send a chat message to all connected peers
+- `/msg @<peerIndex> <message>` - Send a direct message to a peer by `/peers` index
+
+Plain text messages are sent to all connected peers. Room-specific messages use `/msg #<room> message` after joining or creating the room. Direct messages use `/msg @<peerIndex> message`, where `<peerIndex>` comes from the `/peers` command.
 
 ---
 

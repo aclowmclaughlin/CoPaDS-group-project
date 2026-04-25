@@ -842,6 +842,24 @@ public class TcpPeerHandler
     }
 
     /// <summary>
+    /// Gets a connected peer by the index shown in the /peers command.
+    /// </summary>
+    /// <param name="peerIndex">The peer index shown by /peers.</param>
+    /// <returns>The matching peer, or null if the index is invalid.</returns>
+    public Peer? GetPeerByIndex(int peerIndex)
+    {
+        lock(_connections_lock)
+        {
+            List<Peer> peers = _connections.Values.ToList();
+
+            if(peerIndex < 0 || peerIndex >= peers.Count)
+                return null;
+
+            return peers[peerIndex];
+        }
+    }
+
+    /// <summary>
     /// Checks whether a connected peer with the given name already exists.
     /// </summary>
     /// <param name="peerName">The peer name to search for.</param>

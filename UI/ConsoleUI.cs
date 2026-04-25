@@ -21,19 +21,20 @@ public class ConsoleUI
     private const string _HELP_MESSAGE = 
     """
         Supported Commands:
-        /help                - Show this help message
-        /connect <ip> <port> - Connect to a peer
-        /listen <port>       - Start listening for connections
-        /peers               - List known peers
-        /history             - View message history
-        /history clear       - Clear saved message history
-        /quit                - Exit the application
-        /join #<room>        - Join a room
-        /create #<room>      - Create a room with the specified room-id
-        /leave #<room>       - Leaves the room with the specified room-id
-        /rooms               - lists all rooms that are registers with the server
-        /msg #<room> message - Send a message to the specified room
-        Any text without /   - Send a chat message to all connected peers
+        /help                       - Show this help message
+        /connect <ip> <port>        - Connect to a peer
+        /listen <port>              - Start listening for connections
+        /peers                      - List known peers
+        /history                    - View message history
+        /history clear              - Clear saved message history
+        /quit                       - Exit the application
+        /join #<room>               - Join a room
+        /create #<room>             - Create a room with the specified room-id
+        /leave #<room>              - Leaves the room with the specified room-id
+        /rooms                      - lists all rooms that are registers with the server
+        /msg #<room> message        - Send a message to the specified room
+        /msg @<peerIndex> message   - Send a direct message to a peer by /peers index
+        Any text without /          - Send a chat message to all connected peers
     """;
     public ConsoleUI() {}
 
